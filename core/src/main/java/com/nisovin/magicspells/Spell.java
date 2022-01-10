@@ -1,9 +1,9 @@
 package com.nisovin.magicspells;
 
-import net.kyori.adventure.text.Component;
-
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+
+import org.apache.commons.math3.util.Pair;
 
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -35,9 +35,14 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 
+import net.kyori.adventure.text.Component;
+
+import de.slikey.exp4j.Expression;
+
 import com.nisovin.magicspells.util.Util;
 import com.nisovin.magicspells.util.IntMap;
 import com.nisovin.magicspells.util.TxtUtil;
+import com.nisovin.magicspells.util.config.*;
 import com.nisovin.magicspells.util.TimeUtil;
 import com.nisovin.magicspells.util.CastItem;
 import com.nisovin.magicspells.spelleffects.*;
@@ -185,9 +190,10 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 
 	protected double targetDamageAmount;
 
-	protected int range;
+	protected ConfigData<Integer> range;
+	protected ConfigData<Integer> minRange;
+
 	protected int charges;
-	protected int minRange;
 	protected int castTime;
 	protected int experience;
 	protected int broadcastRange;
@@ -313,8 +319,8 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 		spellNameOnInterrupt = config.getString(path + "spell-on-interrupt", null);
 
 		// Targeting
-		minRange = config.getInt(path + "min-range", 0);
-		range = config.getInt(path + "range", 20);
+		minRange = getConfigDataInt("min-range", 0);
+		range = getConfigDataInt("range", 20);
 		spellPowerAffectsRange = config.getBoolean(path + "spell-power-affects-range", false);
 		obeyLos = config.getBoolean(path + "obey-los", true);
 		if (config.contains(path + "can-target")) {
@@ -771,6 +777,129 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 
 	protected ConfigurationSection getConfigSection(String key) {
 		return config.getSection("spells." + internalName + '.' + key);
+	}
+
+	protected ConfigData<Integer> getConfigDataInt(String key, int def) {
+		String path = "spells." + internalName + '.' + key;
+
+		if (config.isInt(path)) {
+			int value = config.getInt(path, def);
+			return (caster, target, power, args) -> value;
+		}
+
+		if (config.isString(path)) {
+			Pair<Expression, Boolean> ex = FunctionData.buildExpression(config.getString(path, ""));
+			if (ex == null) return (caster, target, power, args) -> def;
+
+			return new FunctionData.IntegerData(ex.getFirst(), def, ex.getSecond());
+		}
+
+		return (caster, target, power, args) -> def;
+	}
+
+	protected ConfigData<Integer> getConfigDataInt(String key, ConfigData<Integer> def) {
+		String path = "spells." + internalName + '.' + key;
+
+		if (config.isInt(path)) {
+			int value = config.getInt(path);
+			return (caster, target, power, args) -> value;
+		}
+
+		if (config.isString(path)) {
+			Pair<Expression, Boolean> ex = FunctionData.buildExpression(config.getString(path, ""));
+			if (ex == null) return def;
+
+			return new FunctionData.IntegerData(ex.getFirst(), def, ex.getSecond());
+		}
+
+		return def;
+	}
+
+	protected ConfigData<Double> getConfigDataDouble(String key, double def) {
+		String path = "spells." + internalName + '.' + key;
+
+		if (config.isDouble(path)) {
+			double value = config.getDouble(path, def);
+			return (caster, target, power, args) -> value;
+		}
+
+		if (config.isString(path)) {
+			Pair<Expression, Boolean> ex = FunctionData.buildExpression(config.getString(path, ""));
+			if (ex == null) return (caster, target, power, args) -> def;
+
+			return new FunctionData.DoubleData(ex.getFirst(), def, ex.getSecond());
+		}
+
+		return (caster, target, power, args) -> def;
+	}
+
+	protected ConfigData<Double> getConfigDataDouble(String key, ConfigData<Double> def) {
+		String path = "spells." + internalName + '.' + key;
+
+		if (config.isDouble(path)) {
+			double value = config.getDouble(path);
+			return (caster, target, power, args) -> value;
+		}
+
+		if (config.isString(path)) {
+			Pair<Expression, Boolean> ex = FunctionData.buildExpression(config.getString(path, ""));
+			if (ex == null) return def;
+
+			return new FunctionData.DoubleData(ex.getFirst(), def, ex.getSecond());
+		}
+
+		return def;
+	}
+
+	protected ConfigData<Float> getConfigDataFloat(String key, float def) {
+		String path = "spells." + internalName + '.' + key;
+
+		if (config.isDouble(path)) {
+			float value = (float) config.getDouble(path, def);
+			return (caster, target, power, args) -> value;
+		}
+
+		if (config.isString(path)) {
+			Pair<Expression, Boolean> ex = FunctionData.buildExpression(config.getString(path, ""));
+			if (ex == null) return (caster, target, power, args) -> def;
+
+			return new FunctionData.FloatData(ex.getFirst(), def, ex.getSecond());
+		}
+
+		return (caster, target, power, args) -> def;
+	}
+
+	protected ConfigData<Float> getConfigDataFloat(String key, ConfigData<Float> def) {
+		String path = "spells." + internalName + '.' + key;
+
+		if (config.isDouble(path)) {
+			float value = (float) config.getDouble(path);
+			return (caster, target, power, args) -> value;
+		}
+
+		if (config.isString(path)) {
+			Pair<Expression, Boolean> ex = FunctionData.buildExpression(config.getString(path, ""));
+			if (ex == null) return def;
+
+			return new FunctionData.FloatData(ex.getFirst(), def, ex.getSecond());
+		}
+
+		return def;
+	}
+
+	protected ConfigData<String> getConfigDataString(String key, String def) {
+		String value = config.getString("spells." + internalName + '.' + key, def);
+
+		boolean argReplacement = value.contains("%arg");
+		boolean varReplacement = value.contains("%var") || value.contains("%playervar");
+
+		boolean targeted = value.contains("%targetvar");
+		boolean targetedReplacement = targeted || value.contains("%castervar");
+
+		if (argReplacement || varReplacement || targetedReplacement)
+			return new StringData(value, varReplacement, targetedReplacement, argReplacement, targeted);
+
+		return (caster, target, power, args) -> value;
 	}
 
 	protected boolean isConfigString(String key) {
@@ -1313,6 +1442,11 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 	}
 
 	protected int getRange(float power) {
+		return getRange(null, power, null);
+	}
+
+	protected int getRange(LivingEntity caster, float power, String[] args) {
+		int range = this.range.get(caster, null, power, args);
 		return spellPowerAffectsRange ? Math.round(range * power) : range;
 	}
 
@@ -1335,25 +1469,46 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 	 * @return the targeted Player, or null if none was found
 	 */
 	protected TargetInfo<Player> getTargetedPlayer(LivingEntity livingEntity, float power) {
-		TargetInfo<LivingEntity> target = getTargetedEntity(livingEntity, power, true, null);
+		return getTargetedPlayer(livingEntity, power, null);
+	}
+
+	/**
+	 * Gets the player a player is currently looking at, ignoring other living entities
+	 * @param livingEntity the living entity to get the target for
+	 * @return the targeted Player, or null if none was found
+	 */
+	protected TargetInfo<Player> getTargetedPlayer(LivingEntity livingEntity, float power, String[] args) {
+		TargetInfo<LivingEntity> target = getTargetedEntity(livingEntity, power, true, null, args);
 		if (target == null) return null;
 		if (!(target.getTarget() instanceof Player)) return null;
 		return new TargetInfo<>((Player) target.getTarget(), target.getPower());
 	}
 
 	protected TargetInfo<Player> getTargetPlayer(LivingEntity caster, float power) {
-		return getTargetedPlayer(caster, power);
+		return getTargetedPlayer(caster, power, null);
 	}
 
 	protected TargetInfo<LivingEntity> getTargetedEntity(LivingEntity caster, float power) {
-		return getTargetedEntity(caster, power, false, null);
+		return getTargetedEntity(caster, power, false, null, null);
+	}
+
+	protected TargetInfo<LivingEntity> getTargetedEntity(LivingEntity caster, float power, String[] args) {
+		return getTargetedEntity(caster, power, false, null, args);
 	}
 
 	protected TargetInfo<LivingEntity> getTargetedEntity(LivingEntity caster, float power, ValidTargetChecker checker) {
-		return getTargetedEntity(caster, power, false, checker);
+		return getTargetedEntity(caster, power, false, checker, null);
+	}
+
+	protected TargetInfo<LivingEntity> getTargetedEntity(LivingEntity caster, float power, ValidTargetChecker checker, String[] args) {
+		return getTargetedEntity(caster, power, false, checker, args);
 	}
 
 	protected TargetInfo<LivingEntity> getTargetedEntity(LivingEntity caster, float power, boolean forceTargetPlayers, ValidTargetChecker checker) {
+		return getTargetedEntity(caster, power, forceTargetPlayers, checker, null);
+	}
+
+	protected TargetInfo<LivingEntity> getTargetedEntity(LivingEntity caster, float power, boolean forceTargetPlayers, ValidTargetChecker checker, String[] args) {
 		int currentRange = getRange(power);
 		List<Entity> nearbyEntities = caster.getNearbyEntities(currentRange, currentRange, currentRange);
 
@@ -1396,7 +1551,7 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 		double zUpper = 1.75;
 
 		// Do min range
-		for (int i = 0; i < minRange && blockIterator.hasNext(); i++) {
+		for (int i = 0; i < minRange.get(caster, null, power, args) && blockIterator.hasNext(); i++) {
 			blockIterator.next();
 		}
 
@@ -1458,7 +1613,7 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 				}
 
 				// Call event listeners
-				SpellTargetEvent spellTargetEvent = new SpellTargetEvent(this, caster, target, power);
+				SpellTargetEvent spellTargetEvent = new SpellTargetEvent(this, caster, target, power, args);
 				EventUtil.call(spellTargetEvent);
 				if (spellTargetEvent.isCancelled()) {
 					blacklistedEntities.add(target);
@@ -1493,11 +1648,19 @@ public abstract class Spell implements Comparable<Spell>, Listener {
 	}
 
 	protected Block getTargetedBlock(LivingEntity entity, float power) {
-		return BlockUtils.getTargetBlock(this, entity, spellPowerAffectsRange ? Math.round(range * power) : range);
+		return BlockUtils.getTargetBlock(this, entity, getRange(entity, power, null));
+	}
+
+	protected Block getTargetedBlock(LivingEntity entity, float power, String[] args) {
+		return BlockUtils.getTargetBlock(this, entity, getRange(entity, power, args));
 	}
 
 	protected List<Block> getLastTwoTargetedBlocks(LivingEntity entity, float power) {
-		return BlockUtils.getLastTwoTargetBlock(this, entity, spellPowerAffectsRange ? Math.round(range * power) : range);
+		return BlockUtils.getLastTwoTargetBlock(this, entity, getRange(entity, power, null));
+	}
+
+	protected List<Block> getLastTwoTargetedBlocks(LivingEntity entity, float power, String[] args) {
+		return BlockUtils.getLastTwoTargetBlock(this, entity, getRange(entity, power, args));
 	}
 
 	public Set<Material> getLosTransparentBlocks() {

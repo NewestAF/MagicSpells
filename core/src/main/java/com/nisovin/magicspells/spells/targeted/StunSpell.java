@@ -21,6 +21,7 @@ import com.nisovin.magicspells.util.TimeUtil;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 
@@ -29,21 +30,25 @@ public class StunSpell extends TargetedSpell implements TargetedEntitySpell {
 	private final Map<UUID, StunnedInfo> stunnedLivingEntities;
 
 	private final int interval;
-	private final int duration;
-	private final boolean stunMonitor;
-	private final boolean stunBody;
-	private final boolean useTargetLocation;
+	private final ConfigData<Integer> duration;
 
-	private final Listener listener;
+	private final boolean stunBody;
+	private final boolean stunMonitor;
+	private final boolean useTargetLocation;
+	private final boolean powerAffectsDuration;
+
+	private final StunListener listener;
 
 	public StunSpell(MagicConfig config, String spellName) {
 		super(config, spellName);
 
 		interval = getConfigInt("interval", 5);
-		duration = (int) (getConfigInt("duration", 200) * TimeUtil.MILLISECONDS_PER_SECOND / 20);
-		stunMonitor = getConfigBoolean("stun-monitor", true);
+		duration = getConfigDataInt("duration", 200);
+
 		stunBody = getConfigBoolean("stun-body", true);
+		stunMonitor = getConfigBoolean("stun-monitor", true);
 		useTargetLocation = getConfigBoolean("use-target-location", true);
+		powerAffectsDuration = getConfigBoolean("power-affects-duration", true);
 
 		listener = new StunListener();
 		stunnedLivingEntities = new HashMap<>();
@@ -65,12 +70,12 @@ public class StunSpell extends TargetedSpell implements TargetedEntitySpell {
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
-			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power, args);
 			if (targetInfo == null) return noTarget(caster);
 			LivingEntity target = targetInfo.getTarget();
 			power = targetInfo.getPower();
 
-			stunLivingEntity(caster, target, Math.round(duration * power));
+			stunLivingEntity(caster, target, power, args);
 			sendMessages(caster, target, args);
 			return PostCastAction.NO_MESSAGES;
 		}
@@ -78,20 +83,33 @@ public class StunSpell extends TargetedSpell implements TargetedEntitySpell {
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (!validTargetList.canTarget(caster, target)) return false;
-		stunLivingEntity(caster, target, Math.round(duration * power));
+		stunLivingEntity(caster, target, power, args);
+		return true;
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power, String[] args) {
+		if (!validTargetList.canTarget(target)) return false;
+		stunLivingEntity(null, target, power, args);
 		return true;
 	}
 
 	@Override
 	public boolean castAtEntity(LivingEntity target, float power) {
-		if (!validTargetList.canTarget(target)) return false;
-		stunLivingEntity(null, target, Math.round(duration * power));
-		return true;
+		return castAtEntity(target, power, null);
 	}
 
-	private void stunLivingEntity(LivingEntity caster, LivingEntity target, int duration) {
+	private void stunLivingEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		long duration = this.duration.get(caster, target, power, args) * TimeUtil.MILLISECONDS_PER_SECOND / 20;
+		if (powerAffectsDuration) duration = Math.round(duration * power);
+
 		StunnedInfo info = new StunnedInfo(caster, target, System.currentTimeMillis() + duration, target.getLocation());
 		stunnedLivingEntities.put(target.getUniqueId(), info);
 
@@ -113,7 +131,8 @@ public class StunSpell extends TargetedSpell implements TargetedEntitySpell {
 		stunnedLivingEntities.remove(entity.getUniqueId());
 	}
 
-	private record StunnedInfo(LivingEntity caster, LivingEntity target, Long until, Location targetLocation) {}
+	private record StunnedInfo(LivingEntity caster, LivingEntity target, Long until, Location targetLocation) {
+	}
 
 	private class StunListener implements Listener {
 

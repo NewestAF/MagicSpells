@@ -26,6 +26,7 @@ import com.nisovin.magicspells.util.ColorUtil;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spells.TargetedLocationSpell;
 
@@ -54,15 +55,15 @@ public class ParticleCloudSpell extends TargetedSpell implements TargetedLocatio
 	private boolean dust = false;
 	private boolean block = false;
 
-	private int color;
-	private int waitTime;
-	private int ticksDuration;
-	private int durationOnUse;
-	private int reapplicationDelay;
+	private ConfigData<Integer> color;
+	private ConfigData<Integer> waitTime;
+	private ConfigData<Integer> ticksDuration;
+	private ConfigData<Integer> durationOnUse;
+	private ConfigData<Integer> reapplicationDelay;
 
-	private float radius;
-	private float radiusOnUse;
-	private float radiusPerTick;
+	private ConfigData<Float> radius;
+	private ConfigData<Float> radiusOnUse;
+	private ConfigData<Float> radiusPerTick;
 
 	private boolean useGravity;
 	private boolean canTargetEntities;
@@ -119,15 +120,15 @@ public class ParticleCloudSpell extends TargetedSpell implements TargetedLocatio
 			MagicSpells.error("ParticleCloudSpell '" + internalName + "' has a wrong dust-color defined! '" + colorHex + "'");
 		}
 
-		color = getConfigInt("color", 0xFF0000);
-		waitTime = getConfigInt("wait-time-ticks", 10);
-		ticksDuration = getConfigInt("duration-ticks", 3 * TimeUtil.TICKS_PER_SECOND);
-		durationOnUse = getConfigInt("duration-ticks-on-use", 0);
-		reapplicationDelay = getConfigInt("reapplication-delay-ticks", 3 * TimeUtil.TICKS_PER_SECOND);
+		color = getConfigDataInt("color", 0xFF0000);
+		waitTime = getConfigDataInt("wait-time-ticks", 10);
+		ticksDuration = getConfigDataInt("duration-ticks", 3 * TimeUtil.TICKS_PER_SECOND);
+		durationOnUse = getConfigDataInt("duration-ticks-on-use", 0);
+		reapplicationDelay = getConfigDataInt("reapplication-delay-ticks", 3 * TimeUtil.TICKS_PER_SECOND);
 
-		radius = getConfigFloat("radius", 5F);
-		radiusOnUse = getConfigFloat("radius-on-use", 0F);
-		radiusPerTick = getConfigFloat("radius-per-tick", 0F);
+		radius = getConfigDataFloat("radius", 5F);
+		radiusOnUse = getConfigDataFloat("radius-on-use", 0F);
+		radiusPerTick = getConfigDataFloat("radius-per-tick", 0F);
 
 		useGravity = getConfigBoolean("use-gravity", false);
 		canTargetEntities = getConfigBoolean("can-target-entities", true);
@@ -161,10 +162,18 @@ public class ParticleCloudSpell extends TargetedSpell implements TargetedLocatio
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
 			Location locToSpawn = null;
+			LivingEntity target = null;
 
 			if (canTargetEntities) {
-				TargetInfo<LivingEntity> targetEntityInfo = getTargetedEntity(caster, power);
-				if (targetEntityInfo != null && targetEntityInfo.getTarget() != null) locToSpawn = targetEntityInfo.getTarget().getLocation();
+				TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power, args);
+				if (targetInfo != null) {
+					target = targetInfo.getTarget();
+
+					if (target != null) {
+						locToSpawn = targetInfo.getTarget().getLocation();
+						power = targetInfo.getPower();
+					}
+				}
 			}
 
 			if (canTargetLocation && locToSpawn == null) {
@@ -176,39 +185,59 @@ public class ParticleCloudSpell extends TargetedSpell implements TargetedLocatio
 
 			locToSpawn.setDirection(caster.getLocation().getDirection());
 
-			AreaEffectCloud cloud = spawnCloud(locToSpawn);
+			AreaEffectCloud cloud = spawnCloud(caster, target, locToSpawn, power, args);
 			cloud.setSource(caster);
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
 		if (!canTargetLocation) return false;
-		AreaEffectCloud cloud = spawnCloud(target);
+		AreaEffectCloud cloud = spawnCloud(caster, null, target, power, args);
 		cloud.setSource(caster);
 		return true;
+	}
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+		return castAtLocation(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtLocation(Location target, float power, String[] args) {
+		return castAtLocation(null, target, power, args);
 	}
 
 	@Override
 	public boolean castAtLocation(Location target, float power) {
-		return castAtLocation(null, target, power);
+		return castAtLocation(null, target, power, null);
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (!canTargetEntities) return false;
-		AreaEffectCloud cloud = spawnCloud(target.getLocation());
+		AreaEffectCloud cloud = spawnCloud(caster, target, target.getLocation(), power, args);
 		cloud.setSource(caster);
 		return true;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity target, float power) {
-		return castAtEntity(null, target, power);
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
 	}
 
-	private AreaEffectCloud spawnCloud(Location loc) {
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power, String[] args) {
+		return castAtEntity(null, target, power, args);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power) {
+		return castAtEntity(null, target, power, null);
+	}
+
+	private AreaEffectCloud spawnCloud(LivingEntity caster, LivingEntity target, Location loc, float power, String[] args) {
 		Location location = loc.clone();
 		Vector startDir = loc.getDirection().normalize();
 
@@ -224,15 +253,15 @@ public class ParticleCloudSpell extends TargetedSpell implements TargetedLocatio
 		else if (dust) cloud.setParticle(particle, dustOptions);
 		else if (none) cloud.setParticle(particle);
 
-		cloud.setColor(Color.fromRGB(color));
-		cloud.setRadius(radius);
+		cloud.setColor(Color.fromRGB(color.get(caster, target, power, args)));
+		cloud.setRadius(radius.get(caster, target, power, args));
 		cloud.setGravity(useGravity);
-		cloud.setWaitTime(waitTime);
-		cloud.setDuration(ticksDuration);
-		cloud.setDurationOnUse(durationOnUse);
-		cloud.setRadiusOnUse(radiusOnUse);
-		cloud.setRadiusPerTick(radiusPerTick);
-		cloud.setReapplicationDelay(reapplicationDelay);
+		cloud.setWaitTime(waitTime.get(caster, target, power, args));
+		cloud.setDuration(ticksDuration.get(caster, target, power, args));
+		cloud.setDurationOnUse(durationOnUse.get(caster, target, power, args));
+		cloud.setRadiusOnUse(radiusOnUse.get(caster, target, power, args));
+		cloud.setRadiusPerTick(radiusPerTick.get(caster, target, power, args));
+		cloud.setReapplicationDelay(reapplicationDelay.get(caster, target, power, args));
 
 		for (PotionEffect eff : potionEffects) {
 			cloud.addCustomEffect(eff, true);

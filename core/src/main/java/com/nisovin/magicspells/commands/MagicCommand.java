@@ -506,7 +506,7 @@ public class MagicCommand extends BaseCommand {
 
 			VariableMod variableMod = new VariableMod(String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
 			String oldValue = MagicSpells.getVariableManager().getStringValue(variableName, playerName);
-			MagicSpells.getVariableManager().processVariableMods(variableName, variableMod, player, player, null);
+			MagicSpells.getVariableManager().processVariableMods(variableName, variableMod, player, player, null, 1f, null);
 
 			String message = player == null ? "Value" : TxtUtil.getPossessiveName(playerName) + " value";
 			issuer.sendMessage(MagicSpells.getTextColor() + message + " of '" + variableName + "' was modified: '" + oldValue + "' to '" + MagicSpells.getVariableManager().getStringValue(variableName, playerName) + "'.");
@@ -839,8 +839,8 @@ public class MagicCommand extends BaseCommand {
 
 			boolean casted;
 			// Handle with or without caster.
-			if (issuer.getIssuer() instanceof LivingEntity) casted = newSpell.castAtLocation(issuer.getIssuer(), location, 1F);
-			else casted = newSpell.castAtLocation(location, 1F);
+			if (issuer.getIssuer() instanceof LivingEntity) casted = newSpell.castAtLocation(issuer.getIssuer(), location, 1F, null);
+			else casted = newSpell.castAtLocation(location, 1F, null);
 			if (!casted) throw new ConditionFailedException("Spell probably cannot be cast from console.");
 		}
 

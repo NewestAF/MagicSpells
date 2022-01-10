@@ -18,6 +18,7 @@ import com.nisovin.magicspells.util.BlockUtils;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 
@@ -28,7 +29,7 @@ public class EntombSpell extends TargetedSpell implements TargetedEntitySpell {
 	private Material material;
 	private String materialName;
 	
-	private int duration;
+	private ConfigData<Integer> duration;
 
 	private boolean allowBreaking;
 	private boolean closeTopAndBottom;
@@ -45,7 +46,7 @@ public class EntombSpell extends TargetedSpell implements TargetedEntitySpell {
 			material = null;
 		}
 		
-		duration = getConfigInt("duration", 20);
+		duration = getConfigDataInt("duration", 20);
 
 		allowBreaking = getConfigBoolean("allow-breaking", true);
 		closeTopAndBottom = getConfigBoolean("close-top-and-bottom", true);
@@ -69,12 +70,12 @@ public class EntombSpell extends TargetedSpell implements TargetedEntitySpell {
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
-			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power, args);
 			if (targetInfo == null) return noTarget(caster);
 			LivingEntity target = targetInfo.getTarget();
 			power = targetInfo.getPower();
 			
-			createTomb(target, power);
+			createTomb(caster, target, power, args);
 			sendMessages(caster, target, args);
 			playSpellEffects(caster, target);
 			return PostCastAction.NO_MESSAGES;
@@ -83,22 +84,32 @@ public class EntombSpell extends TargetedSpell implements TargetedEntitySpell {
 	}
 	
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (!validTargetList.canTarget(caster, target)) return false;
 		playSpellEffects(caster, target);
-		createTomb(target, power);
+		createTomb(caster, target, power, args);
 		return true;
 	}
-	
+
 	@Override
-	public boolean castAtEntity(LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power, String[] args) {
 		if (!validTargetList.canTarget(target)) return false;
-		createTomb(target, power);
+		createTomb(null, target, power, args);
 		playSpellEffects(EffectPosition.TARGET, target);
 		return true;
 	}
-	
-	private void createTomb(LivingEntity target, float power) {
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power) {
+		return castAtEntity(target, power, null);
+	}
+
+	private void createTomb(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		List<Block> tempBlocks = new ArrayList<>();
 		List<Block> tombBlocks = new ArrayList<>();
 		
@@ -133,7 +144,8 @@ public class EntombSpell extends TargetedSpell implements TargetedEntitySpell {
 		}
 		
 		blocks.addAll(tombBlocks);
-		
+
+		int duration = this.duration.get(caster, target, power, args);
 		if (duration > 0 && !tombBlocks.isEmpty()) {
 			MagicSpells.scheduleDelayedTask(() -> removeTomb(tombBlocks), Math.round(duration * power));
 		}

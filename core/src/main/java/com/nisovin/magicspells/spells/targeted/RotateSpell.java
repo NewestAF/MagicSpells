@@ -8,14 +8,15 @@ import com.nisovin.magicspells.util.Util;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 import com.nisovin.magicspells.spells.TargetedLocationSpell;
 
 public class RotateSpell extends TargetedSpell implements TargetedEntitySpell, TargetedLocationSpell {
 
-	private int rotationYaw;
-	private int rotationPitch;
+	private ConfigData<Integer> rotationYaw;
+	private ConfigData<Integer> rotationPitch;
 
 	private boolean random;
 	private boolean affectPitch;
@@ -26,8 +27,8 @@ public class RotateSpell extends TargetedSpell implements TargetedEntitySpell, T
 	public RotateSpell(MagicConfig config, String spellName) {
 		super(config, spellName);
 
-		rotationYaw = getConfigInt("rotation-yaw", 10);
-		rotationPitch = getConfigInt("rotation-pitch", 0);
+		rotationYaw = getConfigDataInt("rotation-yaw", 10);
+		rotationPitch = getConfigDataInt("rotation-pitch", 0);
 
 		random = getConfigBoolean("random", false);
 		affectPitch = getConfigBoolean("affect-pitch", false);
@@ -39,33 +40,48 @@ public class RotateSpell extends TargetedSpell implements TargetedEntitySpell, T
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
-			TargetInfo<LivingEntity> target = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> target = getTargetedEntity(caster, power, args);
 			if (target == null) return noTarget(caster);
-			spin(caster, target.getTarget());
+			spinFace(caster, target.getTarget(), power, args);
 			playSpellEffects(caster, target.getTarget());
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		playSpellEffects(caster, target);
-		spin(caster, target);
+		spinFace(caster, target, power, args);
+		return true;
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power, String[] args) {
+		playSpellEffects(EffectPosition.TARGET, target);
+		spinTarget(null, target, power, args);
 		return true;
 	}
 
 	@Override
 	public boolean castAtEntity(LivingEntity target, float power) {
+		return castAtEntity(target, power, null);
+	}
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
 		playSpellEffects(EffectPosition.TARGET, target);
-		spin(target);
+		spin(caster, target);
 		return true;
 	}
 
 	@Override
 	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
-		playSpellEffects(EffectPosition.TARGET, target);
-		spin(caster, target);
-		return true;
+		return castAtLocation(caster, target, power, null);
 	}
 
 	@Override
@@ -73,24 +89,24 @@ public class RotateSpell extends TargetedSpell implements TargetedEntitySpell, T
 		return false;
 	}
 
-	private void spin(LivingEntity target) {
+	private void spinTarget(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		Location loc = target.getLocation();
 		if (random) {
 			loc.setYaw(Util.getRandomInt(360));
 			if (affectPitch) loc.setPitch(Util.getRandomInt(181) - 90);
 		} else {
-			loc.setYaw(loc.getYaw() + rotationYaw);
-			if (affectPitch) loc.setPitch(loc.getPitch() + rotationPitch);
+			loc.setYaw(loc.getYaw() + rotationYaw.get(caster, target, power, args));
+			if (affectPitch) loc.setPitch(loc.getPitch() + rotationPitch.get(caster, target, power, args));
 		}
 		target.teleport(loc);
 	}
 
-	private void spin(LivingEntity caster, LivingEntity target) {
+	private void spinFace(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		Location targetLoc = target.getLocation();
 		Location casterLoc = caster.getLocation();
 
 		if (face.isEmpty()) {
-			spin(target);
+			spinTarget(caster, target, power, args);
 			return;
 		}
 

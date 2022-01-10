@@ -20,6 +20,7 @@ import com.nisovin.magicspells.util.RegexUtil;
 import com.nisovin.magicspells.util.BlockUtils;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.InstantSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 import com.nisovin.magicspells.spells.TargetedLocationSpell;
 
@@ -30,7 +31,7 @@ public class ConjureBookSpell extends InstantSpell implements TargetedLocationSp
 
 	private boolean openInstead;
 
-	private int pickupDelay;
+	private ConfigData<Integer> pickupDelay;
 
 	private boolean gravity;
 	private boolean addToInventory;
@@ -44,8 +45,7 @@ public class ConjureBookSpell extends InstantSpell implements TargetedLocationSp
 		super(config, spellName);
 		openInstead = getConfigBoolean("open-instead", false);
 
-		pickupDelay = getConfigInt("pickup-delay", 0);
-		pickupDelay = Math.max(pickupDelay, 0);
+		pickupDelay = getConfigDataInt("pickup-delay", 0);
 
 		gravity = getConfigBoolean("gravity", true);
 		addToInventory = getConfigBoolean("add-to-inventory", true);
@@ -73,8 +73,11 @@ public class ConjureBookSpell extends InstantSpell implements TargetedLocationSp
 				if (!added) {
 					Item dropped = player.getWorld().dropItem(player.getLocation(), item);
 					dropped.setItemStack(item);
-					dropped.setPickupDelay(pickupDelay);
 					dropped.setGravity(gravity);
+
+					int delay = Math.max(pickupDelay.get(caster, null, power, args), 0);
+					dropped.setPickupDelay(delay);
+
 					playSpellEffects(EffectPosition.SPECIAL, dropped);
 				}
 			}
@@ -83,19 +86,34 @@ public class ConjureBookSpell extends InstantSpell implements TargetedLocationSp
 	}
 
 	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
+		Player player = caster instanceof Player p ? p : null;
+
+		ItemStack item = createBook(player, args);
+		Item dropped = target.getWorld().dropItem(target, item);
+		dropped.setItemStack(item);
+		dropped.setGravity(gravity);
+
+		int delay = Math.max(pickupDelay.get(caster, null, power, args), 0);
+		dropped.setPickupDelay(delay);
+
+		playSpellEffects(EffectPosition.SPECIAL, dropped);
+		return true;
+	}
+
+	@Override
 	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
-		return castAtLocation(target, power);
+		return castAtLocation(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtLocation(Location target, float power, String[] args) {
+		return castAtLocation(null, target, power, args);
 	}
 
 	@Override
 	public boolean castAtLocation(Location target, float power) {
-		ItemStack item = createBook(null, null);
-		Item dropped = target.getWorld().dropItem(target, item);
-		dropped.setItemStack(item);
-		dropped.setPickupDelay(pickupDelay);
-		dropped.setGravity(gravity);
-		playSpellEffects(EffectPosition.SPECIAL, dropped);
-		return true;
+		return castAtLocation(null, target, power, null);
 	}
 
 	private static Component createComponent(String raw, Player player, String displayName) {
@@ -162,14 +180,6 @@ public class ConjureBookSpell extends InstantSpell implements TargetedLocationSp
 
 	public void setOpenInstead(boolean openInstead) {
 		this.openInstead = openInstead;
-	}
-
-	public int getPickupDelay() {
-		return pickupDelay;
-	}
-
-	public void setPickupDelay(int pickupDelay) {
-		this.pickupDelay = pickupDelay;
 	}
 
 	public boolean hasGravity() {

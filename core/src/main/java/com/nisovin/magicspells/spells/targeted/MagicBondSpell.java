@@ -18,6 +18,7 @@ import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.util.SpellFilter;
 import com.nisovin.magicspells.spells.TargetedSpell;
 import com.nisovin.magicspells.events.SpellCastEvent;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 
@@ -25,7 +26,7 @@ public class MagicBondSpell extends TargetedSpell implements TargetedEntitySpell
 
 	private Map<LivingEntity, LivingEntity> bondTarget;
 
-	private int duration;
+	private ConfigData<Integer> duration;
 
 	private String strDurationEnd;
 
@@ -34,7 +35,7 @@ public class MagicBondSpell extends TargetedSpell implements TargetedEntitySpell
 	public MagicBondSpell(MagicConfig config, String spellName) {
 		super(config, spellName);
 
-		duration = getConfigInt("duration", 200);
+		duration = getConfigDataInt("duration", 200);
 
 		strDurationEnd = getConfigString("str-duration", "");
 
@@ -50,28 +51,32 @@ public class MagicBondSpell extends TargetedSpell implements TargetedEntitySpell
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
-			TargetInfo<LivingEntity> target = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> target = getTargetedEntity(caster, power, args);
 			if (target == null) return noTarget(caster);
 
-			bond(caster, target.getTarget(), power);
+			bond(caster, target.getTarget(), target.getPower(), args);
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
-		bond(caster, target, power);
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		bond(caster, target, power, args);
 		playSpellEffects(caster, target);
 		return true;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity target, float power) {
-		playSpellEffects(EffectPosition.TARGET, target);
-		return true;
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
 	}
 
-	private void bond(LivingEntity caster, LivingEntity target, float power) {
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power) {
+		return false;
+	}
+
+	private void bond(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		bondTarget.put(caster, target);
 		playSpellEffects(caster, target);
 		SpellMonitor monitorBond = new SpellMonitor(caster, target, power);
@@ -85,7 +90,7 @@ public class MagicBondSpell extends TargetedSpell implements TargetedEntitySpell
 			bondTarget.remove(caster);
 
 			HandlerList.unregisterAll(monitorBond);
-		}, duration);
+		}, duration.get(caster, target, power, args));
 	}
 
 	private class SpellMonitor implements Listener {

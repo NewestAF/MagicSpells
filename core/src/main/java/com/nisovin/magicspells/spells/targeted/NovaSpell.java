@@ -21,6 +21,7 @@ import com.nisovin.magicspells.MagicSpells;
 import com.nisovin.magicspells.util.BlockUtils;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spells.TargetedLocationSpell;
 
@@ -38,13 +39,13 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 	private String locationSpellName;
 	private String spellOnWaveRemoveName;
 
-	private int radius;
-	private int startRadius;
-	private int heightPerTick;
-	private int novaTickInterval;
-	private int expandingRadiusChange;
+	private ConfigData<Integer> radius;
+	private ConfigData<Integer> startRadius;
+	private ConfigData<Integer> heightPerTick;
+	private ConfigData<Integer> novaTickInterval;
+	private ConfigData<Integer> expandingRadiusChange;
 
-	private double visibleRange;
+	private ConfigData<Double> visibleRange;
 
 	private boolean pointBlank;
 	private boolean circleShape;
@@ -66,15 +67,13 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 		locationSpellName = getConfigString("spell", "");
 		spellOnWaveRemoveName = getConfigString("spell-on-wave-remove", "");
 		
-		radius = getConfigInt("radius", 3);
-		startRadius = getConfigInt("start-radius", 0);
-		heightPerTick = getConfigInt("height-per-tick", 0);
-		novaTickInterval = getConfigInt("expand-interval", 5);
-		expandingRadiusChange = getConfigInt("expanding-radius-change", 1);
-		if (expandingRadiusChange < 1) expandingRadiusChange = 1;
-		
-		visibleRange = Math.max(getConfigDouble("visible-range", 20), 20);
-		if (visibleRange > MagicSpells.getGlobalRadius()) visibleRange = MagicSpells.getGlobalRadius();
+		radius = getConfigDataInt("radius", 3);
+		startRadius = getConfigDataInt("start-radius", 0);
+		heightPerTick = getConfigDataInt("height-per-tick", 0);
+		novaTickInterval = getConfigDataInt("expand-interval", 5);
+		expandingRadiusChange = getConfigDataInt("expanding-radius-change", 1);
+
+		visibleRange = getConfigDataDouble("visible-range", 20);
 
 		pointBlank = getConfigBoolean("point-blank", true);
 		circleShape = getConfigBoolean("circle-shape", false);
@@ -112,54 +111,75 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 			if (pointBlank) loc = caster.getLocation();
 			else loc = getTargetedBlock(caster, power).getLocation();
 			
-			createNova(caster, loc, power);
+			createNova(caster, null, loc, power, strings);
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 	
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity livingEntity, float v) {
-		createNova(caster, livingEntity.getLocation(), v);
-		return false;
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		createNova(caster, target, target.getLocation(), power, args);
+		return true;
 	}
-	
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		createNova(caster, target, target.getLocation(), power, null);
+		return true;
+	}
+
 	@Override
 	public boolean castAtEntity(LivingEntity livingEntity, float v) {
 		return false;
 	}
 	
 	@Override
-	public boolean castAtLocation(LivingEntity livingEntity, Location location, float v) {
-		createNova(livingEntity, location, v);
-		return false;
+	public boolean castAtLocation(LivingEntity livingEntity, Location location, float v, String[] args) {
+		createNova(livingEntity, null, location, v, args);
+		return true;
 	}
-	
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+		createNova(caster, null, target, power, null);
+		return true;
+	}
+
 	@Override
 	public boolean castAtLocation(Location location, float v) {
 		return false;
 	}
-	
-	private void createNova(LivingEntity livingEntity, Location loc, float power) {
+
+	private void createNova(LivingEntity caster, LivingEntity target, Location loc, float power, String[] args) {
 		if (material == null) return;
 		// Relative offset
 		Location startLoc = loc.clone();
-		Vector direction = livingEntity.getLocation().getDirection().normalize();
+		Vector direction = caster.getLocation().getDirection().normalize();
 		Vector horizOffset = new Vector(-direction.getZ(), 0.0, direction.getX()).normalize();
 		startLoc.add(horizOffset.multiply(relativeOffset.getZ())).getBlock().getLocation();
 		startLoc.add(direction.setY(0).normalize().multiply(relativeOffset.getX()));
 		startLoc.add(0, relativeOffset.getY(), 0);
 		
 		// Get nearby players
+		double visibleRange = Math.min(Math.max(this.visibleRange.get(caster, target, power, args), 20), MagicSpells.getGlobalRadius());
+
 		Collection<Entity> nearbyEntities = startLoc.getWorld().getNearbyEntities(startLoc, visibleRange, visibleRange, visibleRange);
 		List<Player> nearby = new ArrayList<>();
 		for (Entity e : nearbyEntities) {
 			if (!(e instanceof Player)) continue;
 			nearby.add((Player) e);
 		}
-		
+
+		int radius = this.radius.get(caster, target, power, args);
+		int startRadius = this.startRadius.get(caster, target, power, args);
+		int heightPerTick = this.heightPerTick.get(caster, target, power, args);
+		int novaTickInterval = this.novaTickInterval.get(caster, target, power, args);
+		int expandingRadiusChange = this.expandingRadiusChange.get(caster, target, power, args);
+		if (expandingRadiusChange < 1) expandingRadiusChange = 1;
+
 		// Start tracker
-		if (!circleShape) new NovaTrackerSquare(nearby, startLoc.getBlock(), material, livingEntity, radius, novaTickInterval, expandingRadiusChange, power);
-		else new NovaTrackerCircle(nearby, startLoc.getBlock(), material, livingEntity, radius, novaTickInterval, expandingRadiusChange, power);
+		if (!circleShape) new NovaTrackerSquare(nearby, startLoc.getBlock(), material, caster, radius, startRadius, heightPerTick, novaTickInterval, expandingRadiusChange, power);
+		else new NovaTrackerCircle(nearby, startLoc.getBlock(), material, caster, radius, startRadius, heightPerTick, novaTickInterval, expandingRadiusChange, power);
 	}
 	
 	private class NovaTrackerSquare implements Runnable {
@@ -171,12 +191,14 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 		private Block center;
 		private float power;
 		private int radiusNova;
+		private int startRadius;
+		private int heightPerTick;
 		private int radiusChange;
 		private int taskId;
 		private int count;
 		private int temp;
 
-		private NovaTrackerSquare(List<Player> nearby, Block center, Material mat, LivingEntity caster, int radius, int tickInterval, int activeRadiusChange, float power) {
+		private NovaTrackerSquare(List<Player> nearby, Block center, Material mat, LivingEntity caster, int radius, int startRadius, int heightPerTick, int tickInterval, int activeRadiusChange, float power) {
 			this.nearby = nearby;
 			this.center = center;
 			this.matNova = mat;
@@ -185,10 +207,13 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 			this.radiusNova = radius;
 			this.blocks = new HashSet<>();
 			this.radiusChange = activeRadiusChange;
-			this.taskId = MagicSpells.scheduleRepeatingTask(this, 0, tickInterval);
-			
+			this.startRadius = startRadius;
+			this.heightPerTick = heightPerTick;
+
 			this.count = 0;
 			this.temp = 0;
+
+			this.taskId = MagicSpells.scheduleRepeatingTask(this, 0, tickInterval);
 		}
 		
 		@Override
@@ -261,12 +286,14 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 		private Block center;
 		private float power;
 		private int radiusNova;
+		private int startRadius;
+		private int heightPerTick;
 		private int radiusChange;
 		private int taskId;
 		private int count;
 		private int temp;
 
-		private NovaTrackerCircle(List<Player> nearby, Block center, Material mat, LivingEntity caster, int radius, int tickInterval, int activeRadiusChange, float power) {
+		private NovaTrackerCircle(List<Player> nearby, Block center, Material mat, LivingEntity caster, int radius, int startRadius, int heightPerTick, int tickInterval, int activeRadiusChange, float power) {
 			this.nearby = nearby;
 			this.center = center;
 			this.matNova = mat;
@@ -274,11 +301,14 @@ public class NovaSpell extends TargetedSpell implements TargetedLocationSpell, T
 			this.power = power;
 			this.radiusNova = radius;
 			this.blocks = new HashSet<>();
+			this.startRadius = startRadius;
+			this.heightPerTick = heightPerTick;
 			this.radiusChange = activeRadiusChange;
-			this.taskId = MagicSpells.scheduleRepeatingTask(this, 0, tickInterval);
-			
+
 			this.count = 0;
 			this.temp = 0;
+
+			this.taskId = MagicSpells.scheduleRepeatingTask(this, 0, tickInterval);
 		}
 		
 		@Override

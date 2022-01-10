@@ -29,6 +29,7 @@ import com.nisovin.magicspells.util.LocationUtil;
 import com.nisovin.magicspells.spells.TargetedSpell;
 import com.nisovin.magicspells.util.compat.EventUtil;
 import com.nisovin.magicspells.events.SpellTargetEvent;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.util.magicitems.MagicItem;
 import com.nisovin.magicspells.util.magicitems.MagicItems;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
@@ -40,13 +41,13 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 	private final Set<Totem> totems;
 	private final PulserTicker ticker;
 
-	private final int yOffset;
 	private final int interval;
-	private final int totalPulses;
 	private final int capPerPlayer;
+	private final ConfigData<Integer> yOffset;
+	private final ConfigData<Integer> maxDuration;
+	private final ConfigData<Integer> totalPulses;
 
-	private double maxDistanceSquared;
-	private final int maxDuration;
+	private final ConfigData<Double> maxDistance;
 
 	private final boolean marker;
 	private final boolean gravity;
@@ -121,15 +122,13 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 		if (leggings != null) leggings.setAmount(1);
 		if (boots != null) boots.setAmount(1);
 
-		yOffset = getConfigInt("y-offset", 0);
+		yOffset = getConfigDataInt("y-offset", 0);
 		interval = getConfigInt("interval", 30);
-		totalPulses = getConfigInt("total-pulses", 5);
+		maxDuration = getConfigDataInt("max-duration", 0);
+		totalPulses = getConfigDataInt("total-pulses", 5);
 		capPerPlayer = getConfigInt("cap-per-player", 10);
 
-		maxDistanceSquared = getConfigDouble("max-distance", 30);
-		maxDistanceSquared *= maxDistanceSquared;
-
-		maxDuration = getConfigInt("max-duration", 0);
+		maxDistance = getConfigDataDouble("max-distance", 30);
 
 		marker = getConfigBoolean("marker", false);
 		gravity = getConfigBoolean("gravity", false);
@@ -205,9 +204,12 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 
 			if (lastTwo != null && lastTwo.size() == 2) target = lastTwo.get(0);
 			if (target == null) return noTarget(caster);
+
+			int yOffset = this.yOffset.get(caster, null, power, args);
 			if (yOffset > 0) target = target.getRelative(BlockFace.UP, yOffset);
 			else if (yOffset < 0) target = target.getRelative(BlockFace.DOWN, yOffset);
-			if (!BlockUtils.isAir(target.getType()) && target.getType() != Material.SNOW && target.getType() != Material.TALL_GRASS) return noTarget(caster);
+			if (!BlockUtils.isAir(target.getType()) && target.getType() != Material.SNOW && target.getType() != Material.TALL_GRASS)
+				return noTarget(caster);
 
 			if (target != null) {
 				SpellTargetLocationEvent event = new SpellTargetLocationEvent(this, caster, target.getLocation(), power);
@@ -216,46 +218,60 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 				target = event.getTargetLocation().getBlock();
 				power = event.getPower();
 			}
-			createTotem(caster, target.getLocation(), power);
+			createTotem(caster, target.getLocation(), power, args);
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
 		Block block = target.getBlock();
+
+		int yOffset = this.yOffset.get(caster, null, power, args);
 		if (yOffset > 0) block = block.getRelative(BlockFace.UP, yOffset);
 		else if (yOffset < 0) block = block.getRelative(BlockFace.DOWN, yOffset);
 
 		if (BlockUtils.isAir(block.getType()) || block.getType() == Material.SNOW || block.getType() == Material.TALL_GRASS) {
 			if (!centerStand) {
 				Location loc = target.clone();
-				createTotem(caster, loc, power);
-			} else createTotem(caster, block.getLocation(), power);
+				createTotem(caster, loc, power, args);
+			} else createTotem(caster, block.getLocation(), power, args);
 			return true;
 		}
 		block = block.getRelative(BlockFace.UP);
 		if (BlockUtils.isAir(block.getType()) || block.getType() == Material.SNOW || block.getType() == Material.TALL_GRASS) {
 			if (!centerStand) {
 				Location loc = target.clone();
-				createTotem(caster, loc, power);
-			} else createTotem(caster, block.getLocation(), power);
+				createTotem(caster, loc, power, args);
+			} else createTotem(caster, block.getLocation(), power, args);
 			return true;
 		}
 		return false;
 	}
 
 	@Override
-	public boolean castAtLocation(Location target, float power) {
-		return castAtLocation(null, target, power);
+	public boolean castAtLocation(Location target, float power, String[] args) {
+		return castAtLocation(null, target, power, args);
 	}
 
-	private void createTotem(LivingEntity caster, Location loc, float power) {
+	@Override
+	public boolean castAtLocation(Location target, float power) {
+		return castAtLocation(null, target, power, null);
+	}
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+		return castAtLocation(caster, target, power, null);
+	}
+
+	private void createTotem(LivingEntity caster, Location loc, float power, String[] args) {
 		Location loc2 = loc.clone();
 		if (centerStand) loc2 = loc.clone().add(0.5, 0, 0.5);
 
-		Totem totem = new Totem(caster, loc2, power);
+		Totem totem = new Totem(caster, loc2, power, args);
 		totems.add(totem);
+
+		int maxDuration = this.maxDuration.get(caster, null, power, args);
 		if (maxDuration > 0) {
 			MagicSpells.scheduleDelayedTask(() -> {
 				totem.stop();
@@ -288,7 +304,8 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 		if (totems.isEmpty()) return;
 		for (Totem t : totems) {
 			if (target.equals(t.armorStand) && !targetable) e.setCancelled(true);
-			else if (e.getCaster().equals(t.caster) && target.equals(t.armorStand) && !allowCasterTarget) e.setCancelled(true);
+			else if (e.getCaster().equals(t.caster) && target.equals(t.armorStand) && !allowCasterTarget)
+				e.setCancelled(true);
 		}
 	}
 
@@ -306,18 +323,26 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 		private final LivingEntity armorStand;
 		private Location totemLocation;
 
+		private final double maxDistanceSq;
+		private final int totalPulses;
 		private final float power;
 		private int pulseCount;
 
-		private Totem(LivingEntity caster, Location loc, float power) {
+		private Totem(LivingEntity caster, Location loc, float power, String[] args) {
 			this.caster = caster;
 			this.power = power;
+
+			double maxDistance = TotemSpell.this.maxDistance.get(caster, null, power, args);
+			maxDistanceSq = maxDistance * maxDistance;
+
+			totalPulses = TotemSpell.this.totalPulses.get(caster, null, power, args);
 
 			pulseCount = 0;
 			loc.setYaw(caster.getLocation().getYaw());
 			armorStand = (LivingEntity) loc.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
 			if (!totemName.isEmpty()) {
-				if (caster instanceof Player) armorStand.setCustomName(MagicSpells.doArgumentAndVariableSubstitution(Util.colorize(totemName), (Player) caster, null));
+				if (caster instanceof Player)
+					armorStand.setCustomName(MagicSpells.doArgumentAndVariableSubstitution(Util.colorize(totemName), (Player) caster, null));
 				else armorStand.setCustomName(Util.colorize(totemName));
 				armorStand.setCustomNameVisible(totemNameVisible);
 			}
@@ -346,7 +371,7 @@ public class TotemSpell extends TargetedSpell implements TargetedLocationSpell {
 				stop();
 				return true;
 			} else if (caster.isValid() && !armorStand.isDead() && totemLocation.getChunk().isLoaded()) {
-				if (maxDistanceSquared > 0 && (!LocationUtil.isSameWorld(totemLocation, caster) || totemLocation.distanceSquared(caster.getLocation()) > maxDistanceSquared)) {
+				if (maxDistanceSq > 0 && (!LocationUtil.isSameWorld(totemLocation, caster) || totemLocation.distanceSquared(caster.getLocation()) > maxDistanceSq)) {
 					stop();
 					return true;
 				}

@@ -13,40 +13,45 @@ import com.nisovin.magicspells.MagicSpells;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 
 public class MountSpell extends TargetedSpell implements TargetedEntitySpell {
 
-	private int duration;
+	private ConfigData<Integer> duration;
 
 	private boolean reverse;
 
 	public MountSpell(MagicConfig config, String spellName) {
 		super(config, spellName);
 
-		duration = getConfigInt("duration", 0);
+		duration = getConfigDataInt("duration", 0);
 
 		reverse = getConfigBoolean("reverse", false);
-
-		if (duration < 0) duration = 0;
 	}
 
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
-			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power, args);
 			if (targetInfo == null) return noTarget(caster);
 			LivingEntity target = targetInfo.getTarget();
 			if (target == null) return noTarget(caster);
-			mount(caster, target, args);
+			mount(caster, target, power, args);
 		}
 
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		mount(caster, target, power, args);
+		return true;
+	}
+
+	@Override
 	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
-		mount(caster, target, null);
+		mount(caster, target, power, null);
 		return true;
 	}
 
@@ -55,8 +60,10 @@ public class MountSpell extends TargetedSpell implements TargetedEntitySpell {
 		return false;
 	}
 
-	private void mount(LivingEntity caster, LivingEntity target, String[] args) {
+	private void mount(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (caster == null || target == null) return;
+
+		int duration = this.duration.get(caster, target, power, args);
 
 		if (reverse) {
 			if (!caster.getPassengers().isEmpty()) caster.eject();

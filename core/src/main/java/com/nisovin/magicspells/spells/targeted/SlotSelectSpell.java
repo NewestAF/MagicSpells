@@ -38,26 +38,36 @@ public class SlotSelectSpell extends TargetedSpell implements TargetedEntitySpel
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL && caster instanceof Player) {
-			TargetInfo<Player> targetInfo = getTargetedPlayer(caster, power);
+			TargetInfo<Player> targetInfo = getTargetedPlayer(caster, power, args);
 			if (targetInfo == null) return noTarget(caster);
 			Player target = targetInfo.getTarget();
 			if (target == null) return noTarget(caster);
-			slotChange(target);
+			slotChange(caster, target, power, args);
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		return slotChange(caster, target, power, args);
+	}
+
+	@Override
 	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
-		return slotChange(target);
+		return slotChange(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power, String[] args) {
+		return slotChange(null, target, power, args);
 	}
 
 	@Override
 	public boolean castAtEntity(LivingEntity target, float power) {
-		return slotChange(target);
+		return slotChange(null, target, power, null);
 	}
 
-	private boolean slotChange(LivingEntity target) {
+	private boolean slotChange(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (!(target instanceof Player player)) return false;
 		int newSlot = -1;
 		if (isVariable) {

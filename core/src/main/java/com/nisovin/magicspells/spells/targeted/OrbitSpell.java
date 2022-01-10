@@ -16,6 +16,7 @@ import com.nisovin.magicspells.Subspell;
 import com.nisovin.magicspells.MagicSpells;
 import com.nisovin.magicspells.spells.TargetedSpell;
 import com.nisovin.magicspells.util.compat.EventUtil;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.events.SpellTargetEvent;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
@@ -35,22 +36,20 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 	private ValidTargetList entityTargetList;
 	private List<String> targetList;
 
-	private double maxDuration;
+	private ConfigData<Double> maxDuration;
 
-	private int tickInterval;
-	private int vertExpandDelay;
-	private int horizExpandDelay;
+	private ConfigData<Integer> tickInterval;
+	private ConfigData<Integer> vertExpandDelay;
+	private ConfigData<Integer> horizExpandDelay;
 
-	private float yOffset;
-	private float hitRadius;
-	private float orbitRadius;
-	private float horizOffset;
-	private float ticksPerSecond;
-	private float distancePerTick;
-	private float vertExpandRadius;
-	private float verticalHitRadius;
-	private float horizExpandRadius;
-	private float secondsPerRevolution;
+	private ConfigData<Float> yOffset;
+	private ConfigData<Float> hitRadius;
+	private ConfigData<Float> orbitRadius;
+	private ConfigData<Float> horizOffset;
+	private ConfigData<Float> vertExpandRadius;
+	private ConfigData<Float> verticalHitRadius;
+	private ConfigData<Float> horizExpandRadius;
+	private ConfigData<Float> secondsPerRevolution;
 
 	private boolean stopOnHitEntity;
 	private boolean stopOnHitGround;
@@ -73,20 +72,20 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 		targetList = getConfigStringList("can-hit", null);
 		entityTargetList = new ValidTargetList(this, targetList);
 
-		maxDuration = getConfigDouble("max-duration", 20) * (double) TimeUtil.MILLISECONDS_PER_SECOND;
+		maxDuration = getConfigDataDouble("max-duration", 20);
 
-		tickInterval = getConfigInt("tick-interval", 2);
-		vertExpandDelay = getConfigInt("vert-expand-delay", 0);
-		horizExpandDelay = getConfigInt("horiz-expand-delay", 0);
+		tickInterval = getConfigDataInt("tick-interval", 2);
+		vertExpandDelay = getConfigDataInt("vert-expand-delay", 0);
+		horizExpandDelay = getConfigDataInt("horiz-expand-delay", 0);
 
-		yOffset = getConfigFloat("y-offset", 0.6F);
-		hitRadius = getConfigFloat("hit-radius", 1F);
-		orbitRadius = getConfigFloat("orbit-radius", 1F);
-		horizOffset = getConfigFloat("start-horiz-offset", 0);
-		vertExpandRadius = getConfigFloat("vert-expand-radius", 0);
-		verticalHitRadius = getConfigFloat("vertical-hit-radius", 1F);
-		horizExpandRadius = getConfigFloat("horiz-expand-radius", 0);
-		secondsPerRevolution = getConfigFloat("seconds-per-revolution", 3F);
+		yOffset = getConfigDataFloat("y-offset", 0.6F);
+		hitRadius = getConfigDataFloat("hit-radius", 1F);
+		orbitRadius = getConfigDataFloat("orbit-radius", 1F);
+		horizOffset = getConfigDataFloat("start-horiz-offset", 0);
+		vertExpandRadius = getConfigDataFloat("vert-expand-radius", 0);
+		verticalHitRadius = getConfigDataFloat("vertical-hit-radius", 1F);
+		horizExpandRadius = getConfigDataFloat("horiz-expand-radius", 0);
+		secondsPerRevolution = getConfigDataFloat("seconds-per-revolution", 3F);
 
 		stopOnHitEntity = getConfigBoolean("stop-on-hit-entity", false);
 		stopOnHitGround = getConfigBoolean("stop-on-hit-ground", false);
@@ -96,9 +95,6 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 		orbitSpellName = getConfigString("spell", "");
 		groundSpellName = getConfigString("spell-on-hit-ground", "");
 		entitySpellName = getConfigString("spell-on-hit-entity", "");
-
-		ticksPerSecond = 20F / (float) tickInterval;
-		distancePerTick = 6.28F / (ticksPerSecond * secondsPerRevolution);
 	}
 
 	@Override
@@ -108,19 +104,22 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 		orbitSpell = new Subspell(orbitSpellName);
 		if (!orbitSpell.process() || !orbitSpell.isTargetedLocationSpell()) {
 			orbitSpell = null;
-			if (!orbitSpellName.isEmpty()) MagicSpells.error("OrbitSpell '" + internalName + "' has an invalid spell defined!");
+			if (!orbitSpellName.isEmpty())
+				MagicSpells.error("OrbitSpell '" + internalName + "' has an invalid spell defined!");
 		}
 
 		groundSpell = new Subspell(groundSpellName);
 		if (!groundSpell.process() || !groundSpell.isTargetedLocationSpell()) {
 			groundSpell = null;
-			if (!groundSpellName.isEmpty()) MagicSpells.error("OrbitSpell '" + internalName + "' has an invalid spell-on-hit-ground defined!");
+			if (!groundSpellName.isEmpty())
+				MagicSpells.error("OrbitSpell '" + internalName + "' has an invalid spell-on-hit-ground defined!");
 		}
 
 		entitySpell = new Subspell(entitySpellName);
 		if (!entitySpell.process() || !entitySpell.isTargetedEntitySpell()) {
 			entitySpell = null;
-			if (!entitySpellName.isEmpty()) MagicSpells.error("OrbitSpell '" + internalName + "' has an invalid spell-on-hit-entity defined!");
+			if (!entitySpellName.isEmpty())
+				MagicSpells.error("OrbitSpell '" + internalName + "' has an invalid spell-on-hit-entity defined!");
 		}
 	}
 
@@ -136,9 +135,9 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
 			if (requireEntityTarget) {
-				TargetInfo<LivingEntity> target = getTargetedEntity(caster, power);
+				TargetInfo<LivingEntity> target = getTargetedEntity(caster, power, args);
 				if (target == null) return noTarget(caster);
-				new OrbitTracker(caster, target.getTarget(), target.getPower());
+				new OrbitTracker(caster, target.getTarget(), target.getPower(), args);
 				playSpellEffects(caster, target.getTarget());
 				sendMessages(caster, target.getTarget(), args);
 				return PostCastAction.NO_MESSAGES;
@@ -146,7 +145,7 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 
 			Block block = getTargetedBlock(caster, power);
 			if (block != null) {
-				SpellTargetLocationEvent event = new SpellTargetLocationEvent(this, caster, block.getLocation(), power);
+				SpellTargetLocationEvent event = new SpellTargetLocationEvent(this, caster, block.getLocation(), power, args);
 				EventUtil.call(event);
 				if (event.isCancelled()) block = null;
 				else {
@@ -157,17 +156,24 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 
 			if (block == null) return noTarget(caster);
 
-			new OrbitTracker(caster, block.getLocation().add(0.5, 0, 0.5), power);
+			new OrbitTracker(caster, block.getLocation().add(0.5, 0, 0.5), power, args);
 			return PostCastAction.HANDLE_NORMALLY;
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
-		new OrbitTracker(caster, target, power);
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		new OrbitTracker(caster, target, power, args);
 		playSpellEffects(caster, target);
 		return true;
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		new OrbitTracker(caster, target, power, null);
+		playSpellEffects(caster, target);
+		return false;
 	}
 
 	@Override
@@ -176,9 +182,15 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 	}
 
 	@Override
-	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
-		new OrbitTracker(caster, target, power);
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
+		new OrbitTracker(caster, target, power, args);
 		return true;
+	}
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+		new OrbitTracker(caster, target, power, null);
+		return false;
 	}
 
 	@Override
@@ -222,10 +234,14 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 		private Vector currentPosition;
 		private BoundingBox box;
 		private Set<LivingEntity> immune;
+		private String[] args;
 
 		private float power;
 		private float orbRadius;
 		private float orbHeight;
+		private float distancePerTick;
+
+		private double maxDuration;
 
 		private int taskId;
 		private int repeatingHorizTaskId;
@@ -233,37 +249,54 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 
 		private long startTime;
 
-		private OrbitTracker(LivingEntity caster, LivingEntity target, float power) {
+		private OrbitTracker(LivingEntity caster, LivingEntity target, float power, String[] args) {
 			this.caster = caster;
 			this.target = target;
 			this.power = power;
+			this.args = args;
 
 			targetLoc = target.getLocation();
-			initialize();
+			initialize(caster, target, power, args);
 		}
 
-		private OrbitTracker(LivingEntity caster, Location targetLoc, float power) {
+		private OrbitTracker(LivingEntity caster, Location targetLoc, float power, String[] args) {
 			this.caster = caster;
 			this.targetLoc = targetLoc;
 			this.power = power;
 
-			initialize();
+			initialize(caster, null, power, args);
 		}
 
-		private void initialize() {
+		private void initialize(LivingEntity caster, LivingEntity target, float power, String[] args) {
 			internalName = OrbitSpell.this.internalName;
 			startTime = System.currentTimeMillis();
 			currentPosition = targetLoc.getDirection().setY(0);
-			Util.rotateVector(currentPosition, horizOffset);
-			taskId = MagicSpells.scheduleRepeatingTask(this, 0, tickInterval);
-			orbRadius = orbitRadius;
-			orbHeight = yOffset;
+			Util.rotateVector(currentPosition, horizOffset.get(caster, target, power, args));
+			orbRadius = orbitRadius.get(caster, target, power, args);
+			orbHeight = yOffset.get(caster, target, power, args);
+
 			immune = new HashSet<>();
 
-			box = new BoundingBox(targetLoc, hitRadius, verticalHitRadius);
+			box = new BoundingBox(targetLoc, hitRadius.get(caster, target, power, args), verticalHitRadius.get(caster, target, power, args));
 
-			if (horizExpandDelay > 0) repeatingHorizTaskId = MagicSpells.scheduleRepeatingTask(() -> orbRadius += horizExpandRadius, horizExpandDelay, horizExpandDelay);
-			if (vertExpandDelay > 0) repeatingVertTaskId = MagicSpells.scheduleRepeatingTask(() -> orbHeight += vertExpandRadius, vertExpandDelay, vertExpandDelay);
+			int tickInterval = OrbitSpell.this.tickInterval.get(caster, target, power, args);
+			taskId = MagicSpells.scheduleRepeatingTask(this, 0, tickInterval);
+
+			int horizExpandDelay = OrbitSpell.this.horizExpandDelay.get(caster, target, power, args);
+			if (horizExpandDelay > 0) {
+				float horizExpandRadius = OrbitSpell.this.horizExpandRadius.get(caster, target, power, args);
+				repeatingHorizTaskId = MagicSpells.scheduleRepeatingTask(() -> orbRadius += horizExpandRadius, horizExpandDelay, horizExpandDelay);
+			}
+
+			int vertExpandDelay = OrbitSpell.this.vertExpandDelay.get(caster, target, power, args);
+			if (vertExpandDelay > 0) {
+				float vertExpandRadius = OrbitSpell.this.vertExpandRadius.get(caster, target, power, args);
+				repeatingVertTaskId = MagicSpells.scheduleRepeatingTask(() -> orbHeight += vertExpandRadius, vertExpandDelay, vertExpandDelay);
+			}
+
+			distancePerTick = 6.28f * tickInterval / secondsPerRevolution.get(caster, target, power, args) / 20;
+
+			maxDuration = OrbitSpell.this.maxDuration.get(caster, target, power, args) * TimeUtil.MILLISECONDS_PER_SECOND;
 
 			effectSet = playSpellEffectLibEffects(EffectPosition.PROJECTILE, targetLoc);
 			entitySet = playSpellEntityEffects(EffectPosition.PROJECTILE, targetLoc);
@@ -339,7 +372,7 @@ public class OrbitSpell extends TargetedSpell implements TargetedEntitySpell, Ta
 				if (!box.contains(e)) continue;
 				if (entityTargetList != null && !entityTargetList.canTarget(e)) continue;
 
-				SpellTargetEvent event = new SpellTargetEvent(OrbitSpell.this, caster, e, power);
+				SpellTargetEvent event = new SpellTargetEvent(OrbitSpell.this, caster, e, power, args);
 				EventUtil.call(event);
 				if (event.isCancelled()) continue;
 

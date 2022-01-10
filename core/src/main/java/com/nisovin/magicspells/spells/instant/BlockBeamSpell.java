@@ -21,9 +21,8 @@ import com.nisovin.magicspells.Subspell;
 import com.nisovin.magicspells.util.Util;
 import com.nisovin.magicspells.MagicSpells;
 import com.nisovin.magicspells.util.MagicConfig;
-import com.nisovin.magicspells.util.BoundingBox;
 import com.nisovin.magicspells.spells.InstantSpell;
-import com.nisovin.magicspells.util.compat.EventUtil;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.events.SpellTargetEvent;
 import com.nisovin.magicspells.zones.NoMagicZoneManager;
 import com.nisovin.magicspells.util.magicitems.MagicItem;
@@ -42,26 +41,25 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 	private Vector relativeOffset;
 	private Vector targetRelativeOffset;
 
-	private int removeDelay;
+	private ConfigData<Integer> removeDelay;
 
-	private double health;
-	private double hitRadius;
-	private double maxDistance;
-	private double verticalHitRadius;
+	private ConfigData<Double> health;
+	private ConfigData<Double> hitRadius;
+	private ConfigData<Double> maxDistance;
+	private ConfigData<Double> verticalHitRadius;
 
-	private float gravity;
-	private float yOffset;
-	private float interval;
-	private float rotation;
-	private float rotationX;
-	private float rotationY;
-	private float rotationZ;
-	private float beamVertOffset;
-	private float beamHorizOffset;
+	private ConfigData<Float> gravity;
+	private ConfigData<Float> yOffset;
+	private ConfigData<Float> interval;
+	private ConfigData<Float> rotation;
+	private ConfigData<Float> rotationX;
+	private ConfigData<Float> rotationY;
+	private ConfigData<Float> rotationZ;
+	private ConfigData<Float> beamVertOffset;
+	private ConfigData<Float> beamHorizOffset;
 
-	private float beamSpread;
-	private float beamVerticalSpread;
-	private float beamHorizontalSpread;
+	private ConfigData<Float> beamVerticalSpread;
+	private ConfigData<Float> beamHorizontalSpread;
 
 	private boolean small;
 	private boolean hpFix;
@@ -96,26 +94,26 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 		relativeOffset = getConfigVector("relative-offset", "0,0.5,0");
 		targetRelativeOffset = getConfigVector("target-relative-offset", "0,0.5,0");
 
-		removeDelay = getConfigInt("remove-delay", 40);
+		removeDelay = getConfigDataInt("remove-delay", 40);
 
-		health = getConfigDouble("health", 2000);
-		hitRadius = getConfigDouble("hit-radius", 2);
-		maxDistance = getConfigDouble("max-distance", 30);
-		verticalHitRadius = getConfigDouble("vertical-hit-radius", 2);
+		health = getConfigDataDouble("health", 2000);
+		hitRadius = getConfigDataDouble("hit-radius", 2);
+		maxDistance = getConfigDataDouble("max-distance", 30);
+		verticalHitRadius = getConfigDataDouble("vertical-hit-radius", 2);
 
-		gravity = getConfigFloat("gravity", 0F);
-		yOffset = getConfigFloat("y-offset", 0F);
-		interval = getConfigFloat("interval", 1F);
-		rotation = getConfigFloat("rotation", 0F);
-		rotationX = getConfigFloat("rotation-x", 0F);
-		rotationY = getConfigFloat("rotation-y", 0F);
-		rotationZ = getConfigFloat("rotation-z", 0F);
-		beamVertOffset = getConfigFloat("beam-vert-offset", 0F);
-		beamHorizOffset = getConfigFloat("beam-horiz-offset", 0F);
+		gravity = getConfigDataFloat("gravity", 0F);
+		yOffset = getConfigDataFloat("y-offset", 0F);
+		interval = getConfigDataFloat("interval", 1F);
+		rotation = getConfigDataFloat("rotation", 0F);
+		rotationX = getConfigDataFloat("rotation-x", 0F);
+		rotationY = getConfigDataFloat("rotation-y", 0F);
+		rotationZ = getConfigDataFloat("rotation-z", 0F);
+		beamVertOffset = getConfigDataFloat("beam-vert-offset", 0F);
+		beamHorizOffset = getConfigDataFloat("beam-horiz-offset", 0F);
 
-		beamSpread = getConfigFloat("beam-spread", 0F);
-		beamVerticalSpread = getConfigFloat("beam-vertical-spread", beamSpread);
-		beamHorizontalSpread = getConfigFloat("beam-horizontal-spread", beamSpread);
+		ConfigData<Float> beamSpread = getConfigDataFloat("beam-spread", 0F);
+		beamVerticalSpread = getConfigDataFloat("beam-vertical-spread", beamSpread);
+		beamHorizontalSpread = getConfigDataFloat("beam-horizontal-spread", beamSpread);
 
 		small = getConfigBoolean("small", false);
 		hpFix = getConfigBoolean("use-hp-fix", false);
@@ -126,10 +124,6 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 		hitSpellName = getConfigString("spell", "");
 		endSpellName = getConfigString("spell-on-end", "");
 		groundSpellName = getConfigString("spell-on-hit-ground", "");
-
-		gravity *= -1;
-		if (interval < 0.01) interval = 0.01F;
-		if (yOffset != 0) relativeOffset.setY(yOffset);
 	}
 
 	@Override
@@ -169,17 +163,19 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
-		if (state == SpellCastState.NORMAL) {
-			new BlockBeam(caster, caster.getLocation(), power);
-		}
-
+		if (state == SpellCastState.NORMAL) shootBeam(caster, null, caster.getLocation(), power, args);
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
-		new BlockBeam(caster, caster.getLocation(), target, power);
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
+		shootBeam(caster, target, caster.getLocation(), power, args);
 		return true;
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
 	}
 
 	@Override
@@ -188,9 +184,14 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 	}
 
 	@Override
-	public boolean castAtLocation(LivingEntity livingEntity, Location location, float v) {
-		new BlockBeam(livingEntity, location, v);
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
+		shootBeam(caster, null, target, power, args);
 		return true;
+	}
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+		return castAtLocation(caster, target, power, null);
 	}
 
 	@Override
@@ -199,9 +200,14 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 	}
 
 	@Override
-	public boolean castAtEntityFromLocation(LivingEntity caster, Location from, LivingEntity target, float power) {
-		new BlockBeam(caster, from, target, power);
+	public boolean castAtEntityFromLocation(LivingEntity caster, Location from, LivingEntity target, float power, String[] args) {
+		shootBeam(caster, target, from, power, args);
 		return true;
+	}
+
+	@Override
+	public boolean castAtEntityFromLocation(LivingEntity caster, Location from, LivingEntity target, float power) {
+		return castAtEntityFromLocation(caster, from, target, power, null);
 	}
 
 	@Override
@@ -213,6 +219,158 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 	public void onSpellTarget(SpellTargetEvent e) {
 		LivingEntity target = e.getTarget();
 		if (target.hasMetadata("MSBlockBeam")) e.setCancelled(true);
+	}
+
+	private void shootBeam(LivingEntity caster, LivingEntity target, Location from, float power, String[] args) {
+		if (headItem == null) return;
+
+		playSpellEffects(EffectPosition.CASTER, caster);
+
+		Location loc = from.clone();
+		if (!changePitch) loc.setPitch(0);
+
+		float beamVertOffset = this.beamVertOffset.get(caster, target, power, args);
+		if (beamVertOffset != 0) loc.setPitch(loc.getPitch() - beamVertOffset);
+
+		float beamHorizOffset = this.beamHorizOffset.get(caster, target, power, args);
+		if (beamHorizOffset != 0) loc.setYaw(loc.getYaw() + beamHorizOffset);
+
+		Vector startDir;
+		if (target == null) startDir = loc.getDirection();
+		else startDir = target.getLocation().toVector().subtract(loc.toVector()).normalize();
+
+		//apply relative offset
+		Vector relativeOffset;
+
+		double yOffset = this.yOffset.get(caster, target, power, args);
+		if (yOffset != 0) relativeOffset = this.relativeOffset.clone().setY(yOffset);
+		else relativeOffset = this.relativeOffset;
+
+		Vector horizOffset = new Vector(-startDir.getZ(), 0, startDir.getX()).normalize();
+		loc.add(horizOffset.multiply(relativeOffset.getZ()));
+		loc.add(loc.getDirection().multiply(relativeOffset.getX()));
+		loc.setY(loc.getY() + relativeOffset.getY());
+
+		float interval = this.interval.get(caster, target, power, args);
+		if (interval < 0.01) interval = 0.01f;
+
+		Vector dir;
+		if (target == null) dir = loc.getDirection().multiply(interval);
+		else {
+			//apply target relative offset
+			Location targetLoc = target.getLocation();
+			Vector targetDir = targetLoc.getDirection();
+
+			Vector targetHorizOffset = new Vector(-targetDir.getZ(), 0, targetDir.getX()).normalize();
+			targetLoc.add(targetHorizOffset.multiply(targetRelativeOffset.getZ()));
+			targetLoc.add(targetLoc.getDirection().multiply(targetRelativeOffset.getX()));
+			targetLoc.setY(target.getLocation().getY() + targetRelativeOffset.getY());
+
+			dir = targetLoc.toVector().subtract(loc.toVector()).normalize().multiply(interval);
+		}
+
+		float beamVerticalSpread = this.beamVerticalSpread.get(caster, target, power, args);
+		float beamHorizontalSpread = this.beamHorizontalSpread.get(caster, target, power, args);
+		if (beamVerticalSpread > 0 || beamHorizontalSpread > 0) {
+			float rx = -1 + random.nextFloat() * 2;
+			float ry = -1 + random.nextFloat() * 2;
+			float rz = -1 + random.nextFloat() * 2;
+			dir.add(new Vector(rx * beamHorizontalSpread, ry * beamVerticalSpread, rz * beamHorizontalSpread));
+		}
+
+		double verticalHitRadius = this.verticalHitRadius.get(caster, target, power, args);
+		double maxDistance = this.maxDistance.get(caster, target, power, args);
+		double hitRadius = this.hitRadius.get(caster, target, power, args);
+		double health = this.health.get(caster, target, power, args);
+
+		float rotationX = this.rotationX.get(caster, target, power, args);
+		float rotationY = this.rotationY.get(caster, target, power, args);
+		float rotationZ = this.rotationZ.get(caster, target, power, args);
+		float rotation = this.rotation.get(caster, target, power, args);
+		float gravity = -this.gravity.get(caster, target, power, args);
+
+		List<LivingEntity> armorStandList = new ArrayList<>();
+		HashSet<Entity> immune = new HashSet<>();
+		float d = 0;
+
+		mainLoop:
+		while (d < maxDistance) {
+			d += interval;
+			loc.add(dir);
+
+			if (rotation != 0) Util.rotateVector(dir, rotation);
+			if (gravity != 0) dir.add(new Vector(0, gravity, 0));
+			if (rotation != 0 || gravity != 0) loc.setDirection(dir);
+
+			if (zoneManager.willFizzle(loc, this)) break;
+
+			//check block collision
+			if (!isTransparent(loc.getBlock())) {
+				playSpellEffects(EffectPosition.DISABLED, loc);
+				if (groundSpell != null) groundSpell.castAtLocation(caster, loc, power);
+				if (stopOnHitGround) break;
+			}
+
+			double pitch = loc.getPitch() * Math.PI / 180;
+
+			ArmorStand armorStand;
+			if (!small) armorStand = loc.getWorld().spawn(loc.clone().subtract(0, 1.7, 0), ArmorStand.class);
+			else armorStand = loc.getWorld().spawn(loc.clone().subtract(0, 0.9, 0), ArmorStand.class);
+
+			armorStand.getEquipment().setHelmet(headItem);
+			armorStand.setGravity(false);
+			armorStand.setVisible(false);
+			armorStand.setCollidable(false);
+			armorStand.setInvulnerable(true);
+			armorStand.setRemoveWhenFarAway(true);
+			armorStand.setHeadPose(new EulerAngle(pitch + rotationX, rotationY, rotationZ));
+			armorStand.setMetadata("MSBlockBeam", new FixedMetadataValue(MagicSpells.getInstance(), "MSBlockBeam"));
+
+			if (hpFix) {
+				armorStand.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(health);
+				armorStand.setHealth(health);
+			}
+			armorStand.setSmall(small);
+			armorStandList.add(armorStand);
+
+			playSpellEffects(EffectPosition.SPECIAL, loc);
+
+			//check entities in the beam range
+			for (LivingEntity e : loc.getNearbyLivingEntities(hitRadius, verticalHitRadius)) {
+				if (e == caster || !e.isValid() || immune.contains(e)) continue;
+				if (validTargetList != null && !validTargetList.canTarget(e)) continue;
+
+				SpellTargetEvent event = new SpellTargetEvent(this, caster, e, power, args);
+				if (!event.callEvent()) continue;
+
+				LivingEntity entity = event.getTarget();
+
+				if (hitSpell != null) {
+					if (hitSpell.isTargetedEntitySpell()) hitSpell.castAtEntity(caster, entity, event.getPower());
+					else if (hitSpell.isTargetedLocationSpell()) hitSpell.castAtLocation(caster, entity.getLocation(), event.getPower());
+				}
+
+				playSpellEffects(EffectPosition.TARGET, entity);
+				playSpellEffectsTrail(caster.getLocation(), entity.getLocation());
+				immune.add(e);
+
+				if (stopOnHitEntity) break mainLoop;
+			}
+		}
+
+		//end of the beam
+		if (!zoneManager.willFizzle(loc, this) && d >= maxDistance) {
+			playSpellEffects(EffectPosition.DELAYED, loc);
+			if (endSpell != null) endSpell.castAtLocation(caster, loc, power);
+		}
+
+		entities.add(armorStandList);
+
+		int removeDelay = this.removeDelay.get(caster, target, power, args);
+		MagicSpells.scheduleDelayedTask(() -> {
+			for (LivingEntity entity : armorStandList) entity.remove();
+			entities.remove(armorStandList);
+		}, removeDelay);
 	}
 
 	public Vector getRelativeOffset() {
@@ -229,142 +387,6 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 
 	public void setTargetRelativeOffset(Vector targetRelativeOffset) {
 		this.targetRelativeOffset = targetRelativeOffset;
-	}
-
-	public int getRemoveDelay() {
-		return removeDelay;
-	}
-
-	public void setRemoveDelay(int removeDelay) {
-		this.removeDelay = removeDelay;
-	}
-
-	public double getHealth() {
-		return health;
-	}
-
-	public void setHealth(double health) {
-		this.health = health;
-	}
-
-	public double getHitRadius() {
-		return hitRadius;
-	}
-
-	public void setHitRadius(double hitRadius) {
-		this.hitRadius = hitRadius;
-	}
-
-	public double getMaxDistance() {
-		return maxDistance;
-	}
-
-	public void setMaxDistance(double maxDistance) {
-		this.maxDistance = maxDistance;
-	}
-
-	public double getVerticalHitRadius() {
-		return verticalHitRadius;
-	}
-
-	public void setVerticalHitRadius(double verticalHitRadius) {
-		this.verticalHitRadius = verticalHitRadius;
-	}
-
-	public float getGravity() {
-		return gravity;
-	}
-
-	public void setGravity(float gravity) {
-		this.gravity = gravity;
-	}
-
-	public float getYOffset() {
-		return yOffset;
-	}
-
-	public void setYOffset(float yOffset) {
-		this.yOffset = yOffset;
-	}
-
-	public float getInterval() {
-		return interval;
-	}
-
-	public void setInterval(float interval) {
-		this.interval = interval;
-	}
-
-	public float getRotation() {
-		return rotation;
-	}
-
-	public void setRotation(float rotation) {
-		this.rotation = rotation;
-	}
-
-	public float getRotationX() {
-		return rotationX;
-	}
-
-	public void setRotationX(float rotationX) {
-		this.rotationX = rotationX;
-	}
-
-	public float getRotationY() {
-		return rotationY;
-	}
-
-	public void setRotationY(float rotationY) {
-		this.rotationY = rotationY;
-	}
-
-	public float getRotationZ() {
-		return rotationZ;
-	}
-
-	public void setRotationZ(float rotationZ) {
-		this.rotationZ = rotationZ;
-	}
-
-	public float getBeamVerticalOffset() {
-		return beamVertOffset;
-	}
-
-	public void setBeamVerticalOffset(float beamVertOffset) {
-		this.beamVertOffset = beamVertOffset;
-	}
-
-	public float getBeamHorizontalOffset() {
-		return beamHorizOffset;
-	}
-
-	public void setBeamHorizontalOffset(float beamHorizOffset) {
-		this.beamHorizOffset = beamHorizOffset;
-	}
-
-	public float getBeamSpread() {
-		return beamSpread;
-	}
-
-	public void setBeamSpread(float beamSpread) {
-		this.beamSpread = beamSpread;
-	}
-
-	public float getBeamVerticalSpread() {
-		return beamVerticalSpread;
-	}
-
-	public void setBeamVerticalSpread(float beamVerticalSpread) {
-		this.beamVerticalSpread = beamVerticalSpread;
-	}
-
-	public float getBeamHorizontalSpread() {
-		return beamHorizontalSpread;
-	}
-
-	public void setBeamHorizontalSpread(float beamHorizontalSpread) {
-		this.beamHorizontalSpread = beamHorizontalSpread;
 	}
 
 	public boolean isSmall() {
@@ -429,180 +451,6 @@ public class BlockBeamSpell extends InstantSpell implements TargetedLocationSpel
 
 	public void setGroundSpell(Subspell groundSpell) {
 		this.groundSpell = groundSpell;
-	}
-
-	private class BlockBeam {
-
-		private LivingEntity caster;
-		private LivingEntity target;
-		private float power;
-		private Location startLoc;
-		private Location currentLoc;
-		private ItemStack helmet;
-
-		private final Set<Entity> immune;
-		private final List<LivingEntity> armorStandList;
-
-		private BlockBeam(LivingEntity caster, Location from, float power) {
-			this.caster = caster;
-			this.power = power;
-			helmet = headItem;
-			startLoc = from.clone();
-			if (!changePitch) startLoc.setPitch(0F);
-
-			immune = new HashSet<>();
-			armorStandList = new ArrayList<>();
-
-			shootBeam();
-		}
-
-		private BlockBeam(LivingEntity caster, Location from, LivingEntity target, float power) {
-			this.caster = caster;
-			this.target = target;
-			this.power = power;
-			helmet = headItem;
-			startLoc = from.clone();
-			if (!changePitch) startLoc.setPitch(0F);
-
-			immune = new HashSet<>();
-			armorStandList = new ArrayList<>();
-
-			shootBeam();
-		}
-
-		private void shootBeam() {
-			if (helmet == null) return;
-			playSpellEffects(EffectPosition.CASTER, caster);
-
-			if (beamVertOffset != 0) startLoc.setPitch(startLoc.getPitch() - beamVertOffset);
-			if (beamHorizOffset != 0) startLoc.setYaw(startLoc.getYaw() + beamHorizOffset);
-
-			Vector startDir;
-			if (target == null) startDir = startLoc.getDirection().normalize();
-			else startDir = target.getLocation().toVector().subtract(startLoc.clone().toVector()).normalize();
-
-			//apply relative offset
-			Vector horizOffset = new Vector(-startDir.getZ(), 0, startDir.getX()).normalize();
-			startLoc.add(horizOffset.multiply(relativeOffset.getZ())).getBlock().getLocation();
-			startLoc.add(startLoc.getDirection().clone().multiply(relativeOffset.getX()));
-			startLoc.setY(startLoc.getY() + relativeOffset.getY());
-
-			currentLoc = startLoc.clone();
-
-			//apply target relative offset
-			Location targetLoc = null;
-			if (target != null) {
-				targetLoc = target.getLocation().clone();
-				startDir = targetLoc.clone().getDirection().normalize();
-				horizOffset = new Vector(-startDir.getZ(), 0.0, startDir.getX()).normalize();
-				targetLoc.add(horizOffset.multiply(targetRelativeOffset.getZ())).getBlock().getLocation();
-				targetLoc.add(targetLoc.getDirection().multiply(targetRelativeOffset.getX()));
-				targetLoc.setY(target.getLocation().getY() + targetRelativeOffset.getY());
-			}
-
-			Vector dir;
-			if (target == null) dir = startLoc.getDirection().multiply(interval);
-			else dir = targetLoc.toVector().subtract(startLoc.clone().toVector()).normalize().multiply(interval);
-
-			if (beamVerticalSpread > 0 || beamHorizontalSpread > 0) {
-				float rx = -1 + random.nextFloat() * 2;
-				float ry = -1 + random.nextFloat() * 2;
-				float rz = -1 + random.nextFloat() * 2;
-				dir.add(new Vector(rx * beamHorizontalSpread, ry * beamVerticalSpread, rz * beamHorizontalSpread));
-			}
-
-			BoundingBox box = new BoundingBox(currentLoc, hitRadius, verticalHitRadius);
-
-			float d = 0;
-			mainLoop:
-			while (d < maxDistance) {
-
-				d += interval;
-				currentLoc.add(dir);
-
-				if (rotation != 0) Util.rotateVector(dir, rotation);
-				if (gravity != 0) dir.add(new Vector(0, gravity,0));
-				currentLoc.setDirection(dir);
-
-				if (zoneManager.willFizzle(currentLoc, BlockBeamSpell.this)) {
-					break;
-				}
-
-				//check block collision
-				if (!isTransparent(currentLoc.getBlock())) {
-					playSpellEffects(EffectPosition.DISABLED, currentLoc);
-					if (groundSpell != null) groundSpell.castAtLocation(caster, currentLoc, power);
-					if (stopOnHitGround) break;
-				}
-
-				double pitch = currentLoc.getPitch() * Math.PI / 180;
-
-				ArmorStand armorStand;
-				if (!small) armorStand = currentLoc.getWorld().spawn(currentLoc.clone().subtract(0, 1.7, 0), ArmorStand.class);
-				else armorStand = currentLoc.getWorld().spawn(currentLoc.clone().subtract(0, 0.9, 0), ArmorStand.class);
-
-				armorStand.getEquipment().setHelmet(helmet);
-				armorStand.setGravity(false);
-				armorStand.setVisible(false);
-				armorStand.setCollidable(false);
-				armorStand.setInvulnerable(true);
-				armorStand.setRemoveWhenFarAway(true);
-				armorStand.setHeadPose(new EulerAngle(pitch + rotationX, rotationY, rotationZ));
-				armorStand.setMetadata("MSBlockBeam", new FixedMetadataValue(MagicSpells.getInstance(), "MSBlockBeam"));
-
-				if (hpFix) {
-					armorStand.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(health);
-					armorStand.setHealth(health);
-				}
-				armorStand.setSmall(small);
-				armorStandList.add(armorStand);
-
-				playSpellEffects(EffectPosition.SPECIAL, currentLoc);
-
-				box.setCenter(currentLoc);
-
-				//check entities in the beam range
-				for (LivingEntity e : startLoc.getWorld().getLivingEntities()) {
-					if (e.equals(caster)) continue;
-					if (e.isDead()) continue;
-					if (immune.contains(e)) continue;
-					if (!box.contains(e)) continue;
-					if (validTargetList != null && !validTargetList.canTarget(e)) continue;
-
-					SpellTargetEvent event = new SpellTargetEvent(BlockBeamSpell.this, caster, e, power);
-					EventUtil.call(event);
-					if (event.isCancelled()) continue;
-					LivingEntity entity = event.getTarget();
-
-					if (hitSpell != null) {
-						if (hitSpell.isTargetedEntitySpell()) hitSpell.castAtEntity(caster, entity, event.getPower());
-						else if (hitSpell.isTargetedLocationSpell()) hitSpell.castAtLocation(caster, entity.getLocation(), event.getPower());
-					}
-
-					playSpellEffects(EffectPosition.TARGET, entity);
-					playSpellEffectsTrail(caster.getLocation(), entity.getLocation());
-					immune.add(e);
-
-					if (stopOnHitEntity) break mainLoop;
-				}
-			}
-
-			//end of the beam
-			if (!zoneManager.willFizzle(currentLoc, BlockBeamSpell.this) && d >= maxDistance) {
-				playSpellEffects(EffectPosition.DELAYED, currentLoc);
-				if (endSpell != null) endSpell.castAtLocation(caster, currentLoc, power);
-			}
-
-			entities.add(armorStandList);
-
-			MagicSpells.scheduleDelayedTask(() -> {
-				for (LivingEntity entity : armorStandList) {
-					entity.remove();
-				}
-				entities.remove(armorStandList);
-			}, removeDelay);
-		}
-
 	}
 
 }

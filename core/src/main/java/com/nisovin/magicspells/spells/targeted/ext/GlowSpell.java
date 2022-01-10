@@ -16,6 +16,7 @@ import com.nisovin.magicspells.MagicSpells;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 
@@ -28,10 +29,13 @@ public class GlowSpell extends TargetedSpell implements TargetedEntitySpell {
 	private final Multimap<UUID, UUID> glowing;
 	private final Set<UUID> glowingUnpaired;
 
-	private final boolean toggle;
-	private final int duration;
-	private final boolean clientSide;
+	private final ConfigData<Integer> duration;
+
+	private final boolean powerAffectsDuration;
 	private final boolean visibleToTarget;
+	private final boolean clientSide;
+	private final boolean toggle;
+
 	private GlowAPI.Color color;
 
 	public GlowSpell(MagicConfig config, String spellName) {
@@ -40,15 +44,15 @@ public class GlowSpell extends TargetedSpell implements TargetedEntitySpell {
 		glowingUnpaired = new HashSet<>();
 
 		toggle = getConfigBoolean("toggle", false);
-		duration = getConfigInt("duration", 0);
+		duration = getConfigDataInt("duration", 0);
 		clientSide = getConfigBoolean("client-side", false);
 		visibleToTarget = getConfigBoolean("visible-to-target", false);
+		powerAffectsDuration = getConfigBoolean("power-affects-duration", true);
 
 		String colorName = getConfigString("color", "");
 		try {
 			color = GlowAPI.Color.valueOf(colorName.toUpperCase());
-		}
-		catch (IllegalArgumentException ignored) {
+		} catch (IllegalArgumentException ignored) {
 			color = GlowAPI.Color.WHITE;
 			MagicSpells.log("GlowSpell '" + internalName + "' has an invalid color defined': " + colorName);
 		}
@@ -57,29 +61,39 @@ public class GlowSpell extends TargetedSpell implements TargetedEntitySpell {
 	@Override
 	public PostCastAction castSpell(LivingEntity livingEntity, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL && livingEntity instanceof Player caster) {
-			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> targetInfo = getTargetedEntity(caster, power, args);
 			if (targetInfo == null) return noTarget(caster);
 			LivingEntity target = targetInfo.getTarget();
 
 			sendMessages(caster, target, args);
-			glow(caster, target, targetInfo.getPower());
+			glow(caster, target, targetInfo.getPower(), args);
 			return PostCastAction.NO_MESSAGES;
 		}
 		return PostCastAction.HANDLE_NORMALLY;
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (!validTargetList.canTarget(caster, target)) return false;
-		glow(caster instanceof Player ? (Player) caster : null, target, power);
+		glow(caster instanceof Player ? (Player) caster : null, target, power, args);
+		return true;
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity target, float power, String[] args) {
+		if (!validTargetList.canTarget(target)) return false;
+		glow(null, target, power, args);
 		return true;
 	}
 
 	@Override
 	public boolean castAtEntity(LivingEntity target, float power) {
-		if (!validTargetList.canTarget(target)) return false;
-		glow(null, target, power);
-		return true;
+		return castAtEntity(target, power, null);
 	}
 
 	@Override
@@ -103,8 +117,10 @@ public class GlowSpell extends TargetedSpell implements TargetedEntitySpell {
 		return glowing.containsValue(uuid) || glowingUnpaired.contains(uuid);
 	}
 
-	private void glow(Player caster, LivingEntity target, float power) {
-		int duration = Math.round(this.duration * power);
+	private void glow(Player caster, LivingEntity target, float power, String[] args) {
+		int duration = this.duration.get(caster, target, power, args);
+		if (powerAffectsDuration) duration = Math.round(duration * power);
+
 		UUID uuid = target.getUniqueId();
 
 		// Handle reapply and toggle.

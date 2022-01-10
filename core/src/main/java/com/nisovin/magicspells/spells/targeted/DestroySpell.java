@@ -23,6 +23,7 @@ import com.nisovin.magicspells.util.BlockUtils;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
 import com.nisovin.magicspells.util.compat.EventUtil;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spelleffects.EffectPosition;
 import com.nisovin.magicspells.spells.TargetedLocationSpell;
 import com.nisovin.magicspells.events.SpellTargetLocationEvent;
@@ -35,28 +36,38 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 	private Set<Material> blockTypesToRemove;
 	private Set<FallingBlock> fallingBlocks;
 
+	private ConfigData<Integer> vertRadius;
+	private ConfigData<Integer> horizRadius;
+	private ConfigData<Integer> fallingBlockMaxHeight;
+
+	private ConfigData<Double> velocity;
+
+	private ConfigData<Float> fallingBlockDamage;
+
 	private boolean checkPlugins;
-	private int vertRadius;
-	private int horizRadius;
-	private int fallingBlockDamage;
-
-	private float velocity;
-
 	private boolean preventLandingBlocks;
+	private boolean resolveDamagePerBlock;
+	private boolean resolveVelocityPerBlock;
+	private boolean resolveMaxHeightPerBlock;
 
 	private VelocityType velocityType;
 
 	public DestroySpell(MagicConfig config, String spellName) {
 		super(config, spellName);
 
+		vertRadius = getConfigDataInt("vert-radius", 3);
+		horizRadius = getConfigDataInt("horiz-radius", 3);
+		fallingBlockMaxHeight = getConfigDataInt("falling-block-max-height", 0);
+
+		velocity = getConfigDataDouble("velocity", 0);
+
+		fallingBlockDamage = getConfigDataFloat("falling-block-damage", 0);
+
 		checkPlugins = getConfigBoolean("check-plugins", true);
-		vertRadius = getConfigInt("vert-radius", 3);
-		horizRadius = getConfigInt("horiz-radius", 3);
-		fallingBlockDamage = getConfigInt("falling-block-damage", 0);
-
-		velocity = getConfigFloat("velocity", 0);
-
 		preventLandingBlocks = getConfigBoolean("prevent-landing-blocks", false);
+		resolveDamagePerBlock = getConfigBoolean("resolve-damage-per-block", false);
+		resolveVelocityPerBlock = getConfigBoolean("resolve-velocity-per-block", false);
+		resolveMaxHeightPerBlock = getConfigBoolean("resolve-max-height-per-block", false);
 
 		String vType = getConfigString("velocity-type", "none");
 
@@ -106,14 +117,14 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 		if (state == SpellCastState.NORMAL) {
 			Block b = getTargetedBlock(caster, power);
 			if (b != null && !BlockUtils.isAir(b.getType())) {
-				SpellTargetLocationEvent event = new SpellTargetLocationEvent(this, caster, b.getLocation(), power);
+				SpellTargetLocationEvent event = new SpellTargetLocationEvent(this, caster, b.getLocation(), power, args);
 				EventUtil.call(event);
 				if (event.isCancelled()) b = null;
 				else b = event.getTargetLocation().getBlock();
 			}
 			if (b != null && !BlockUtils.isAir(b.getType())) {
 				Location loc = b.getLocation().add(0.5, 0.5, 0.5);
-				doIt(caster, caster.getLocation(), loc);
+				doIt(caster, null, caster.getLocation(), loc, power, args);
 				playSpellEffects(caster, loc);
 			}
 		}
@@ -121,10 +132,15 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 	}
 
 	@Override
-	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
-		doIt(caster, caster.getLocation(), target);
+	public boolean castAtLocation(LivingEntity caster, Location target, float power, String[] args) {
+		doIt(caster, null, caster.getLocation(), target, power, args);
 		playSpellEffects(caster, target);
 		return true;
+	}
+
+	@Override
+	public boolean castAtLocation(LivingEntity caster, Location target, float power) {
+		return castAtLocation(caster, target, power, null);
 	}
 
 	@Override
@@ -133,31 +149,44 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 	}
 
 	@Override
+	public boolean castAtEntityFromLocation(LivingEntity caster, Location from, LivingEntity target, float power, String[] args) {
+		doIt(caster, target, from, target.getLocation(), power, args);
+		playSpellEffects(from, target);
+		return true;
+	}
+
+	@Override
 	public boolean castAtEntityFromLocation(LivingEntity caster, Location from, LivingEntity target, float power) {
-		doIt(caster, from, target.getLocation());
+		return castAtEntityFromLocation(caster, from, target, power, null);
+	}
+
+	@Override
+	public boolean castAtEntityFromLocation(Location from, LivingEntity target, float power, String[] args) {
+		doIt(null, target, from, target.getLocation(), power, args);
 		playSpellEffects(from, target);
 		return true;
 	}
 
 	@Override
 	public boolean castAtEntityFromLocation(Location from, LivingEntity target, float power) {
-		doIt(null, from, target.getLocation());
-		playSpellEffects(from, target);
-		return true;
+		return castAtEntityFromLocation(from, target, power, null);
 	}
 
-	private void doIt(LivingEntity caster, Location source, Location target) {
-		int centerX = target.getBlockX();
-		int centerY = target.getBlockY();
-		int centerZ = target.getBlockZ();
+	private void doIt(LivingEntity caster, LivingEntity target, Location source, Location targetLocation, float power, String[] args) {
+		int centerX = targetLocation.getBlockX();
+		int centerY = targetLocation.getBlockY();
+		int centerZ = targetLocation.getBlockZ();
 
 		List<Block> blocksToThrow = new ArrayList<>();
 		List<Block> blocksToRemove = new ArrayList<>();
 
+		int vertRadius = this.vertRadius.get(caster, target, power, args);
+		int horizRadius = this.vertRadius.get(caster, target, power, args);
+
 		for (int y = centerY - vertRadius; y <= centerY + vertRadius; y++) {
 			for (int x = centerX - horizRadius; x <= centerX + horizRadius; x++) {
 				for (int z = centerZ - horizRadius; z <= centerZ + horizRadius; z++) {
-					Block b = target.getWorld().getBlockAt(x, y, z);
+					Block b = targetLocation.getWorld().getBlockAt(x, y, z);
 					if (b.getType() == Material.BEDROCK) continue;
 					if (BlockUtils.isAir(b.getType())) continue;
 
@@ -169,7 +198,8 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 
 					if (blockTypesToThrow != null) {
 						if (blockTypesToThrow.contains(b.getType())) blocksToThrow.add(b);
-						else if (blockTypesToRemove != null && blockTypesToRemove.contains(b.getType())) blocksToRemove.add(b);
+						else if (blockTypesToRemove != null && blockTypesToRemove.contains(b.getType()))
+							blocksToRemove.add(b);
 						else if (!b.getType().isSolid()) blocksToRemove.add(b);
 						continue;
 					}
@@ -184,6 +214,10 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 			b.setType(Material.AIR);
 		}
 
+		double velocity = resolveVelocityPerBlock ? 0 : this.velocity.get(caster, target, power, args);
+		float fallingBlockDamage = resolveDamagePerBlock ? 0 : this.fallingBlockDamage.get(caster, target, power, args);
+		int fallingBlockHeight = resolveMaxHeightPerBlock ? 0 : this.fallingBlockMaxHeight.get(caster, target, power, args);
+
 		for (Block b : blocksToThrow) {
 			Material material = b.getType();
 			Location l = b.getLocation().clone().add(0.5, 0.5, 0.5);
@@ -193,6 +227,7 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 			playTrackingLinePatterns(EffectPosition.DYNAMIC_CASTER_PROJECTILE_LINE, source, fb.getLocation(), null, fb);
 
 			Vector v;
+			if (resolveVelocityPerBlock) velocity = this.velocity.get(caster, target, power, args);
 			if (velocityType == VelocityType.UP) {
 				v = new Vector(0, velocity, 0);
 				v.setY(v.getY() + ((Math.random() - 0.5) / 4));
@@ -204,12 +239,19 @@ public class DestroySpell extends TargetedSpell implements TargetedLocationSpell
 				v.normalize().multiply(velocity);
 				fb.setVelocity(v);
 			} else if (velocityType == VelocityType.DOWN) v = new Vector(0, -velocity, 0);
-			else if (velocityType == VelocityType.TOWARD) v = source.toVector().subtract(l.toVector()).normalize().multiply(velocity);
-			else if (velocityType == VelocityType.AWAY) v = l.toVector().subtract(source.toVector()).normalize().multiply(velocity);
+			else if (velocityType == VelocityType.TOWARD)
+				v = source.toVector().subtract(l.toVector()).normalize().multiply(velocity);
+			else if (velocityType == VelocityType.AWAY)
+				v = l.toVector().subtract(source.toVector()).normalize().multiply(velocity);
 			else v = new Vector(0, (Math.random() - 0.5) / 4, 0);
 
-			if (v != null) fb.setVelocity(v);
-			if (fallingBlockDamage > 0) MagicSpells.getVolatileCodeHandler().setFallingBlockHurtEntities(fb, fallingBlockDamage, fallingBlockDamage);
+			fb.setVelocity(v);
+
+			if (resolveDamagePerBlock) fallingBlockDamage = this.fallingBlockDamage.get(caster, target, power, args);
+			if (fallingBlockDamage > 0) {
+				if (resolveMaxHeightPerBlock) fallingBlockHeight = this.fallingBlockMaxHeight.get(caster, target, power, args);
+				MagicSpells.getVolatileCodeHandler().setFallingBlockHurtEntities(fb, fallingBlockDamage, fallingBlockHeight);
+			}
 
 			if (preventLandingBlocks) fallingBlocks.add(fb);
 			b.setType(Material.AIR);

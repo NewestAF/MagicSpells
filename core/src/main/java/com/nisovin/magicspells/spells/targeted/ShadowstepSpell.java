@@ -10,14 +10,15 @@ import com.nisovin.magicspells.util.BlockUtils;
 import com.nisovin.magicspells.util.TargetInfo;
 import com.nisovin.magicspells.util.MagicConfig;
 import com.nisovin.magicspells.spells.TargetedSpell;
+import com.nisovin.magicspells.util.config.ConfigData;
 import com.nisovin.magicspells.spells.TargetedEntitySpell;
 
 public class ShadowstepSpell extends TargetedSpell implements TargetedEntitySpell {
 
-	private float yaw;
-	private float pitch;
+	private ConfigData<Float> yaw;
+	private ConfigData<Float> pitch;
 
-	private double distance;
+	private ConfigData<Double> distance;
 
 	private Vector relativeOffset;
 
@@ -26,25 +27,23 @@ public class ShadowstepSpell extends TargetedSpell implements TargetedEntitySpel
 	public ShadowstepSpell(MagicConfig config, String spellName) {
 		super(config, spellName);
 
-		yaw = getConfigFloat("yaw", 0);
-		pitch = getConfigFloat("pitch", 0);
+		yaw = getConfigDataFloat("yaw", 0);
+		pitch = getConfigDataFloat("pitch", 0);
 
-		distance = getConfigDouble("distance", -1);
+		distance = getConfigDataDouble("distance", -1);
 
 		relativeOffset = getConfigVector("relative-offset", "-1,0,0");
 
 		strNoLandingSpot = getConfigString("str-no-landing-spot", "Cannot shadowstep there.");
-
-		if (distance != -1) relativeOffset.setX(distance);
 	}
 
 	@Override
 	public PostCastAction castSpell(LivingEntity caster, SpellCastState state, float power, String[] args) {
 		if (state == SpellCastState.NORMAL) {
-			TargetInfo<LivingEntity> target = getTargetedEntity(caster, power);
+			TargetInfo<LivingEntity> target = getTargetedEntity(caster, power, args);
 			if (target == null) return noTarget(caster);
 
-			boolean done = shadowstep(caster, target.getTarget());
+			boolean done = shadowstep(caster, target.getTarget(), target.getPower(), args);
 			if (!done) return noTarget(caster, strNoLandingSpot);
 			sendMessages(caster, target.getTarget(), args);
 			return PostCastAction.NO_MESSAGES;
@@ -53,9 +52,14 @@ public class ShadowstepSpell extends TargetedSpell implements TargetedEntitySpel
 	}
 
 	@Override
-	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		if (!validTargetList.canTarget(caster, target)) return false;
-		return shadowstep(caster, target);
+		return shadowstep(caster, target, power, args);
+	}
+
+	@Override
+	public boolean castAtEntity(LivingEntity caster, LivingEntity target, float power) {
+		return castAtEntity(caster, target, power, null);
 	}
 
 	@Override
@@ -63,19 +67,22 @@ public class ShadowstepSpell extends TargetedSpell implements TargetedEntitySpel
 		return false;
 	}
 
-	private boolean shadowstep(LivingEntity caster, LivingEntity target) {
+	private boolean shadowstep(LivingEntity caster, LivingEntity target, float power, String[] args) {
 		Location targetLoc = target.getLocation().clone();
 		targetLoc.setPitch(0);
 
 		Vector startDir = targetLoc.getDirection().setY(0).normalize();
 		Vector horizOffset = new Vector(-startDir.getZ(), 0, startDir.getX()).normalize();
 
+		double distance = this.distance.get(caster, target, power, args);
+		Vector relativeOffset = distance != -1 ? this.relativeOffset.clone().setX(distance) : this.relativeOffset;
+
 		targetLoc.add(horizOffset.multiply(relativeOffset.getZ())).getBlock().getLocation();
 		targetLoc.add(targetLoc.getDirection().setY(0).multiply(relativeOffset.getX()));
 		targetLoc.setY(targetLoc.getY() + relativeOffset.getY());
 
-		targetLoc.setPitch(pitch);
-		targetLoc.setYaw(targetLoc.getYaw() + yaw);
+		targetLoc.setPitch(pitch.get(caster, target, power, args));
+		targetLoc.setYaw(targetLoc.getYaw() + yaw.get(caster, target, power, args));
 
 		Block b = targetLoc.getBlock();
 		if (!BlockUtils.isPathable(b.getType()) || !BlockUtils.isPathable(b.getRelative(BlockFace.UP))) return false;
