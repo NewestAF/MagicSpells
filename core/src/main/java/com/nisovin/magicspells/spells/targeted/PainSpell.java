@@ -1,5 +1,6 @@
 package com.nisovin.magicspells.spells.targeted;
 
+import com.nisovin.magicspells.MagicSpells;
 import org.bukkit.EntityEffect;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.LivingEntity;
@@ -23,6 +24,7 @@ public class PainSpell extends TargetedSpell implements TargetedEntitySpell, Dam
 	private DamageCause damageType;
 
 	private double damage;
+	private int damagePercent;
 
 	private boolean ignoreArmor;
 	private boolean checkPlugins;
@@ -42,6 +44,11 @@ public class PainSpell extends TargetedSpell implements TargetedEntitySpell, Dam
 		}
 
 		damage = getConfigFloat("damage", 4);
+		damagePercent = getConfigInt("damage-percent", 0);
+
+		if (damagePercent < 0 || damagePercent > 100) {
+			MagicSpells.error("HealSpell '" + internalName + "' uses damage-percent outside bounds 0-100.");
+		}
 
 		ignoreArmor = getConfigBoolean("ignore-armor", false);
 		checkPlugins = getConfigBoolean("check-plugins", true);
@@ -86,7 +93,11 @@ public class PainSpell extends TargetedSpell implements TargetedEntitySpell, Dam
 	private boolean causePain(LivingEntity caster, LivingEntity target, float power) {
 		if (target == null) return false;
 		if (target.isDead()) return false;
-		double localDamage = damage * power;
+
+		double localDamage;
+
+		if (damagePercent == 0) localDamage = damage * power;
+		else localDamage = Util.getMaxHealth(target) * (damagePercent / 100f);
 
 		if (checkPlugins) {
 			MagicSpellsEntityDamageByEntityEvent event = new MagicSpellsEntityDamageByEntityEvent(caster, target, damageType, localDamage, this);
